@@ -16,7 +16,12 @@ const facts = {
   some: m.rels.filter(r => r.k === 'some' && !r.eq && !r.inv).map(r => cls[r.s].iri + ' ' + pr[r.p].iri + ' ' + cls[r.o].iri).sort(),
   domrange: m.rels.filter(r => r.k === 'prop').map(r => cls[r.s].iri + ' ' + pr[r.p].iri + ' ' + cls[r.o].iri).sort(),
   labelled: cls.filter(c => c.labels.length).length,
-  individuals: m.inds.map(i => i.iri).sort(),
+  individuals: m.inds.filter(i => i.explicit).map(i => i.iri).sort(),
+  classesAll: cls.map(c => c.iri),
+  schemaProps: pr.slice(0, m.schemaProps).map(p => p.iri),
+  assertions: [].concat(...m.inds.map(i => { const o = []; for (let q = 0; q < i.out.length; q += 2) if (i.explicit && m.inds[i.out[q + 1]].explicit) o.push(i.iri + ' ' + pr[i.out[q]].iri + ' ' + m.inds[i.out[q + 1]].iri); return o; })).sort(),
+  dataValues: m.inds.filter(i => i.explicit).reduce((n, i) => n + i.dv.length / 4, 0),
+  typesOf: Object.fromEntries(m.inds.filter(i => i.explicit && i.types.length).map(i => [i.iri, i.types.map(t => cls[t].iri).sort()])),
   deprecated: cls.filter(c => c.dep).map(c => c.iri).sort(),
 };
 fs.writeFileSync(out, JSON.stringify(facts));

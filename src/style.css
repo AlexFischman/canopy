@@ -69,6 +69,8 @@ kbd {
 .dot { width: 8px; height: 8px; border-radius: 50%; display: inline-block; flex: none; background: var(--ink3); }
 .pglyph { width: 10px; height: 10px; display: inline-block; flex: none; border: 2px solid var(--rel); border-radius: 2px; transform: rotate(45deg) scale(.8); }
 .pglyph.data { border-color: var(--restr); }
+.iglyph { width: 9px; height: 9px; display: inline-block; flex: none; border: 2px solid var(--ink3); border-radius: 50%; background: var(--surface); }
+.lnk .iglyph { margin-right: 6px; vertical-align: 0; }
 .pglyph.other { border-color: var(--ink3); }
 
 .seg { display: inline-flex; background: var(--surface2); border-radius: 9px; padding: 2px; flex: none; }

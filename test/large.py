@@ -5,7 +5,7 @@ from playwright.async_api import async_playwright
 HERE = pathlib.Path(__file__).resolve().parent
 URL = (HERE.parent / 'canopy.html').as_uri() + '#debug'
 DATA = HERE / 'data'
-FILES = ['koala/koala.owl', 'bfo/bfo.owl', 'sosa/ssn.ttl', 'gist/gistCore.ttl', 'pizza/pizza.owl',
+FILES = ['koala/koala.owl', 'bfo/bfo.owl', 'sosa/ssn.ttl', 'gist/gistCore.ttl', 'pizza/pizza.owl', 'wine/wine.owl',
          'schema/schemaorg.ttl', 'brick/Brick.ttl', 'envo/envo.owl', 'doid/doid.owl']
 def launch_args():
     a = {'args': ['--no-sandbox']}

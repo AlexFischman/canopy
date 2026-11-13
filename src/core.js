@@ -1160,24 +1160,89 @@ function CanopyCore() {
       }
     }
 
-    /* individuals */
+    /* individuals: who they are */
     var inds = [], iidx = new Map();
-    function mkInd(iri) {
+    function mkInd(iri, explicit) {
       var x = iidx.get(iri);
-      if (x === undefined) { x = inds.length; iidx.set(iri, x); inds.push({ iri: iri, labels: [], types: [] }); }
+      if (x === undefined) { x = inds.length; iidx.set(iri, x); inds.push({ iri: iri, labels: [], types: [], out: [], dv: [], ov: [], explicit: explicit }); }
       return x;
     }
-    var ontSet = new Set(ontologies);
+    var ontSet = new Set(ontologies), typeTargets = new Set(), schemaProps = props.length;
+    for (k = 0; k < typed.length; k += 2) if (!builtin(typed[k + 1])) typeTargets.add(typed[k + 1]);
+    /* anything that is part of the schema is not treated as an individual unless it is declared as one */
+    function schemaEntity(x) {
+      if (cidx.has(x) || ontSet.has(x) || datatypes.has(x) || typeTargets.has(x)) return true;
+      var pi = pidx.get(x);
+      return pi !== undefined && pi < schemaProps;
+    }
     for (k = 0; k < typed.length; k += 2) {
       s = typed[k]; o = typed[k + 1];
-      if (!namedInd.has(s) && (cidx.has(s) || pidx.has(s) || ontSet.has(s) || datatypes.has(s))) continue;
       if (builtin(o)) continue;
+      if (!namedInd.has(s) && schemaEntity(s)) continue;
       var ct = cref(o);
       if (ct < 0) continue;
-      var ii = mkInd(s);
+      var ii = mkInd(s, true);
       if (inds[ii].types.indexOf(ct) < 0) { inds[ii].types.push(ct); classes[ct].ind.push(ii); }
     }
-    namedInd.forEach(function (iri) { mkInd(iri); });
+    namedInd.forEach(function (iri) { mkInd(iri, true); });
+
+    /* individuals without a type: subjects and objects of declared properties, and whatever is linked to an individual */
+    var nAssert = 0, nValues = 0, obs = [];
+    if (mode === 'owl') {
+      var cand = function (x) { return isI(x) && !builtin(x) && !schemaEntity(x); };
+      for (k = 0; k < N; k += 3) {
+        p = T[k + 1];
+        if (p === TYPE) continue;
+        var dpi = pidx.get(p);
+        if (dpi === undefined || dpi >= schemaProps) continue;
+        s = T[k]; o = T[k + 2];
+        if (!cand(s)) continue;
+        if (props[dpi].kind === 'object') { if (cand(o)) { mkInd(s, false); mkInd(o, false); } }
+        else if (props[dpi].kind === 'data') { if (!isStr(o)) mkInd(s, false); }
+      }
+      if (inds.length) {
+        for (var round = 0; round < 4; round++) {
+          var before = inds.length;
+          for (k = 0; k < N; k += 3) {
+            p = T[k + 1];
+            if (p === TYPE || builtin(p)) continue;
+            s = T[k]; o = T[k + 2];
+            if (!isI(s) || !isI(o)) continue;
+            var si = iidx.has(s), oi = iidx.has(o);
+            if (si && !oi) { if (cand(o) && SP.has(o)) mkInd(o, false); }
+            else if (oi && !si) { if (cand(s)) mkInd(s, false); }
+          }
+          if (inds.length === before) break;
+        }
+      }
+      /* what is said about them */
+      var usedObj = [], usedLit = [], obsMap = new Map();
+      for (i = 0; i < inds.length; i++) {
+        var ind = inds[i], ia2 = SP.get(ind.iri);
+        if (!ia2) continue;
+        for (j = 0; j < ia2.length; j++) {
+          p = T[ia2[j] + 1]; o = T[ia2[j] + 2];
+          if (p === TYPE || p === LABEL || p === PREFLABEL) continue;
+          if (isB(o)) continue;
+          var api = pref(p);
+          props[api].uses = (props[api].uses || 0) + 1;
+          if (!isStr(o)) { ind.dv.push(api, o.v, o.l || '', o.d || ''); usedLit[api] = 1; nValues++; }
+          else {
+            var ti = iidx.get(o);
+            if (ti !== undefined) {
+              ind.out.push(api, ti); usedObj[api] = 1; nAssert++;
+              var ta2 = ind.types, tb2 = inds[ti].types;
+              for (var x1 = 0; x1 < ta2.length; x1++) for (var x2 = 0; x2 < tb2.length; x2++) {
+                var ok = ta2[x1] + '|' + api + '|' + tb2[x2];
+                obsMap.set(ok, (obsMap.get(ok) || 0) + 1);
+              }
+            } else ind.ov.push(api, o);
+          }
+        }
+      }
+      for (i = schemaProps; i < props.length; i++) if (props[i].kind === 'rdf') props[i].kind = usedObj[i] ? 'object' : usedLit[i] ? 'data' : 'rdf';
+      obsMap.forEach(function (n, key) { var q = key.split('|'); obs.push({ s: +q[0], p: +q[1], o: +q[2], n: n }); });
+    }
 
     /* labels, comments, annotations */
     var STRUCT = new Set([TYPE, LABEL, PREFLABEL, RDFS + 'subClassOf', RDFS + 'domain', RDFS + 'range', RDFS + 'subPropertyOf',
@@ -1258,13 +1323,14 @@ function CanopyCore() {
 
     return {
       mode: mode,
-      classes: classes, props: props, inds: inds, rels: rels, groups: groups,
+      classes: classes, props: props, inds: inds, rels: rels, obs: obs, groups: groups, schemaProps: schemaProps,
       ontology: ont, prefixes: prefixes || {},
       langs: langs,
       stats: {
         triples: unique, classes: classes.length, declared: nDeclared, deprecated: nDep,
         objectProps: kinds.object, dataProps: kinds.data, annotationProps: kinds.annotation, otherProps: kinds.rdf,
-        individuals: inds.length, restrictions: nRestr, subClassEdges: subEdges, gci: gci, relations: rels.length
+        individuals: inds.length, restrictions: nRestr, subClassEdges: subEdges, gci: gci, relations: rels.length,
+        assertions: nAssert, dataValues: nValues
       }
     };
   }

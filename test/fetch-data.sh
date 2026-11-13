@@ -13,6 +13,7 @@ get gist   https://raw.githubusercontent.com/semanticarts/gist/develop/ontologie
 get schema https://raw.githubusercontent.com/schemaorg/schemaorg/main/data/releases/29.0/schemaorg-current-https.ttl schemaorg.ttl
 get brick  https://github.com/BrickSchema/Brick/releases/download/v1.4.4/Brick.ttl Brick.ttl
 get envo   https://raw.githubusercontent.com/EnvironmentOntology/envo/master/envo.owl envo.owl
+get wine   https://raw.githubusercontent.com/apache/jena/main/jena-core/testing/reasoners/bugs/wine.owl wine.owl
 get doid   https://raw.githubusercontent.com/DiseaseOntology/HumanDiseaseOntology/main/src/ontology/doid.owl doid.owl
 [ -d rdf-tests ] || git clone --depth 1 -q https://github.com/w3c/rdf-tests.git
 echo "done"

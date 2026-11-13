@@ -103,6 +103,37 @@ def check(path, full_iso):
     dep = sorted({str(s) for s in g.subjects(OWL.deprecated, None) if (str(g.value(s, OWL.deprecated)) in ('true', '1'))} & set(F['declared']) | {str(s) for s in g.subjects(RDF.type, OWL.DeprecatedClass)})
     mdep = [d for d in F['deprecated'] if d in set(F['declared'])]
     if dep != mdep: problems.append('deprecated classes differ: mine %d rdflib %d' % (len(mdep), len(dep)))
+    # individuals: typed by a class outside the RDF/RDFS/OWL/XSD vocabularies, or declared owl:NamedIndividual,
+    # and not themselves part of the schema (unless declared as an individual)
+    BUILTIN = (str(OWL), str(RDFS), str(RDF), str(XSD))
+    def builtin(x): return str(x).startswith(BUILTIN)
+    if decl or F['individuals']:
+        named = {s for s in g.subjects(RDF.type, OWL.NamedIndividual) if isinstance(s, URIRef)}
+        type_targets = {o for s, o in g.subject_objects(RDF.type) if isinstance(s, URIRef) and isinstance(o, URIRef) and not builtin(o)}
+        schema = set(map(URIRef, F['classesAll'])) | set(map(URIRef, F['schemaProps'])) | type_targets
+        schema |= {s for s in g.subjects(RDF.type, OWL.Ontology)} | {s for s in g.subjects(RDF.type, RDFS.Datatype)}
+        inds = set(named); types_of = {}
+        for s, o in g.subject_objects(RDF.type):
+            if not (isinstance(s, URIRef) and isinstance(o, URIRef)) or builtin(o): continue
+            if s not in named and s in schema: continue
+            if o in TOP or (o not in decl and isdt(o)): continue
+            inds.add(s); types_of.setdefault(str(s), set()).add(str(o))
+        if sorted(map(str, inds)) != F['individuals']:
+            a, b = set(map(str, inds)), set(F['individuals'])
+            problems.append('individuals differ: mine %d rdflib %d; e.g. %s | %s' % (len(b), len(a), sorted(b - a)[:2], sorted(a - b)[:2]))
+        if {k: sorted(v) for k, v in types_of.items()} != F['typesOf']: problems.append('types of individuals differ')
+        LABELS = (RDFS.label, URIRef('http://www.w3.org/2004/02/skos/core#prefLabel'))
+        asserts = set(); nvals = 0
+        for s in inds:
+            for p, o in g.predicate_objects(s):
+                if p == RDF.type or p in LABELS: continue
+                if isinstance(o, Literal): nvals += 1
+                elif isinstance(o, URIRef) and o in inds: asserts.add('%s %s %s' % (s, p, o))
+        if sorted(asserts) != F['assertions']:
+            b = set(F['assertions'])
+            problems.append('statements between individuals differ: mine %d rdflib %d; e.g. %s | %s' % (len(b), len(asserts), sorted(b - asserts)[:2], sorted(asserts - b)[:2]))
+        if nvals != F['dataValues']: problems.append('data values on individuals: mine %d rdflib %d' % (F['dataValues'], nvals))
+        print('   rdflib: %d individuals, %d statements between them, %d data values' % (len(inds), len(asserts), nvals))
     print('   rdflib: %d triples, %d declared classes, %d labelled, %d restrictions (%.0fs)' % (len(ref), len(decl), nlab, nres, time.time() - t0))
     return problems
 if __name__ == '__main__':

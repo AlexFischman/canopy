@@ -22,14 +22,17 @@ Canopy separates the two:
 |---|---|
 | **Formats** | RDF/XML (`.owl`, `.rdf`), Turtle (`.ttl`), N-Triples (`.nt`). Open by file picker, drag and drop, or paste. Dropping several files merges them, for example an ontology and its imports. |
 | **Tree view** | Collapsible hierarchy, coloured by top-level branch. Ancestors stay pinned at the edge of the screen while you scroll through a long list of siblings. Classes with several parents appear once; the other parents are drawn when you select the class. |
-| **Focus view** | One class with its parents on the left, children and property targets on the right, one or two steps out. Click a neighbour to refocus. |
+| **Focus view** | One class or individual with what it is connected to: parents and incoming links on the left, children and targets on the right, one or two steps out. Click a neighbour to refocus. |
 | **Details panel** | Label, IRI, description, superclasses, subclasses, properties (direct and inherited), restrictions in Manchester-style text, equivalences, disjointness, individuals, annotations. |
-| **Search** | Labels, identifiers and synonyms, for classes and properties. Matches inside collapsed branches are marked on the branch. |
+| **Individuals** | Listed under their class, searchable and clickable. Each has a panel with its statements, the individuals that refer to it and its data values, and its own focus view. For a selected class, the tree also draws links counted from the statements between individuals, for example `hasMaker (5)`. |
+| **Search** | Labels, identifiers and synonyms, for classes, properties and individuals. Matches inside collapsed branches are marked on the branch. |
 | **Large files** | Parsing runs in a background worker; only what is on screen is drawn. Zoomed out, the largest branches keep readable labels. |
 | **Export** | PNG of the current view, or the visible outline as text. |
 | **Also** | Light and dark theme, label language switch, keyboard navigation, SKOS concept schemes when a file has no OWL classes. |
 
 ![Focus view of one class from the Human Disease Ontology](docs/focus.png)
+
+![Focus view of one individual from the W3C wine ontology](docs/individual.png)
 
 The Help button in the app lists the mouse and keyboard controls.
 
@@ -39,7 +42,8 @@ The Help button in the app lists the mouse and keyboard controls.
 - **No editing.** It is a viewer.
 - **No JSON-LD, OWL/XML, functional or Manchester syntax.** These are detected and reported with a hint on how to convert them.
 - **Imports are not fetched.** The page never uses the network. Drop the imported files together with the ontology instead.
-- **Instances are only counted and listed** per class.
+- **No picture of all individuals at once.** Instance data is explored one individual at a time, or summarised per pair of classes, for the same reason the schema is not drawn all at once.
+- **Individuals without a class** have no place in the tree. They are listed in the overview and found by the search.
 
 ## Privacy and safety
 
@@ -69,7 +73,7 @@ The tests need Node, Python 3 with `rdflib` and `playwright`, and the test data,
 pip install rdflib playwright && playwright install chromium
 test/fetch-data.sh                      # ontologies and the W3C parser test suites, about 85 MB
 python3 test/w3c.py                     # parser conformance
-python3 test/compare.py +test/data/pizza/pizza.owl test/data/doid/doid.owl   # model against rdflib
+python3 test/compare.py +test/data/wine/wine.owl test/data/doid/doid.owl    # model against rdflib
 python3 test/large.py                   # load time, label overlaps and frame time per ontology
 python3 test/smoke.py                   # every control once, fails on any page error
 python3 test/interact.py                # export, zoom, levels, paste, narrow screens, no network
@@ -80,7 +84,7 @@ Set `CHROME=/path/to/chrome` to use an installed browser instead of Playwright's
 Results at the time of the first release:
 
 - **W3C suites.** All positive tests pass for Turtle (145 evaluation, 74 syntax) and N-Triples (41), and 124 of 126 for RDF/XML. The two exceptions concern canonical XML literals. Some negative tests are accepted on purpose: N-Triples is read with the Turtle parser, and duplicate `rdf:ID` values are tolerated.
-- **Against rdflib.** Triples, declared classes, superclasses, property kinds, restrictions and deprecations agree on ten ontologies, from 20 to 16,629 classes.
+- **Against rdflib.** Triples, declared classes, superclasses, property kinds, restrictions and deprecations agree on eleven ontologies, from 20 to 16,629 classes. So do the individuals, their types, the statements between them and their data values.
 - **In the browser.** Headless Chrome, offline, on a two-core machine:
 
 | Ontology | Classes | File | Load | Label overlaps |

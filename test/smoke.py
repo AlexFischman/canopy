@@ -72,6 +72,21 @@ async def main():
         await page.keyboard.press('f'); await page.wait_for_timeout(500)
         await page.mouse.move(500, 300); await page.mouse.move(520, 330, steps=3); await page.wait_for_timeout(900)
         print('frame ms:', await ev('canopyDebug.frame()'), 'overlaps:', await ev('canopyDebug.overlaps()'))
+        # instance data in the built-in sample: search an individual, read its statements, focus on it
+        await page.keyboard.press('Escape'); await page.keyboard.press('Escape')
+        await page.click('#search'); await page.keyboard.type('symphony no'); await page.wait_for_timeout(200)
+        print('individual search:', (await ev("document.getElementById('results').innerText")).replace('\n', ' | ')[:80])
+        await page.keyboard.press('Enter'); await page.wait_for_timeout(600)
+        txt = (await ev("document.querySelector('#pbody').innerText")).replace('\n', ' / ')
+        print('individual panel:', txt[:230]); assert 'composed by' in txt and 'Ludwig van Beethoven' in txt and '67' in txt, 'individual statements missing'
+        print('individual selected:', (await info())['sel'], 'links on tree:', (await info())['arcs'])
+        await page.keyboard.press('g'); await page.wait_for_timeout(700)
+        print('individual focus:', (await ev("document.getElementById('focusBar').innerText")).replace('\n', ' '))
+        await page.mouse.click(760, 470); await page.wait_for_timeout(600)
+        await page.click('#pbody .lnk >> nth=0'); await page.wait_for_timeout(500)
+        await page.keyboard.press('g'); await page.wait_for_timeout(500)
+        await opt(lambda: page.click('.pop label.chk:has-text("Statements between individuals")'))
+        await opt(lambda: page.click('.pop label.chk:has-text("Statements between individuals")'))
         # theme persisted across reload
         await page.keyboard.press('t'); th = await ev("document.documentElement.getAttribute('data-theme')")
         await page.reload(); await page.wait_for_timeout(500); print('theme persisted:', th, '->', await ev("document.documentElement.getAttribute('data-theme')"))

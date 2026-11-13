@@ -29,12 +29,13 @@ function mix(a, b, t) {
 
 const S = {
   view: 'tree', theme: 'light', sel: null, hover: null, labelMode: 'label', lang: '', sort: 'az',
-  f: { dep: false, ext: true, relProps: true, relRestr: true, secondary: true, mini: true },
+  f: { dep: false, ext: true, relProps: true, relRestr: true, relObs: true, secondary: true, mini: true },
   tab: 'details', hops: 1, cap: 40, query: ''
 };
 let M = null, fileLabel = '', isSample = false, loadInfo = null;
 let cname = [], pname = [];
 let nodes = [], root = null, par = [], kidsAll = [], relOut = [], relIn = [], propRels = [], subProps = [], nsList = [];
+let obsOut = [], obsIn = [], obsByProp = [], indIn = [];
 let vis = [], cols = [], colX = [], colW = [], bounds = { w: 0, h: 0 }, gen = 0, maxDepth = 0, depthCount = [], leafCount = [], bfs = [];
 let matches = null, extGroup = null;
 const cam = { x: 0, y: 0, k: 1 };
@@ -517,7 +518,7 @@ function renderTree(c, W, H, cam, ex) {
 
   /* labels */
   c.textBaseline = 'middle'; c.textAlign = 'left';
-  const fpx = 13 * k;
+  const fpx = 13 * k, selTypes = S.sel && S.sel.t === 'i' ? M.inds[S.sel.i].types : null;
   if (fpx >= 6.2) {
     c.font = LABEL_FONT;
     for (let j = 0; j < all.length; j++) {
@@ -527,6 +528,7 @@ function renderTree(c, W, H, cam, ex) {
       if (n.a < 1) c.globalAlpha = n.a;
       if (isSel) { c.fillStyle = T.ink; rr(c, tx - 5, n.y - 9.5, n.w + 10, 19, 5); c.fill(); }
       else if (isM) { c.fillStyle = T.match; rr(c, tx - 4, n.y - 9, n.w + 8, 18, 4); c.fill(); }
+      else if (selTypes !== null && selTypes.indexOf(n.i) >= 0) { c.fillStyle = T.surface; rr(c, tx - 5, n.y - 9.5, n.w + 10, 19, 5); c.fill(); c.strokeStyle = T.ink; c.lineWidth = 1.5 / k; c.stroke(); }
       else if (n === hn) { c.fillStyle = T.surface; rr(c, tx - 5, n.y - 9.5, n.w + 10, 19, 5); c.fill(); c.strokeStyle = T.line2; c.lineWidth = 1 / k; c.stroke(); }
       c.fillStyle = isSel ? T.bg : n.dep ? T.ink3 : n.ext ? T.ink2 : T.ink;
       c.fillText(n.t, tx, n.y + 0.5);
@@ -612,6 +614,12 @@ function relLabel(r) {
 }
 function relShown(r) { return r.k === 'prop' || r.k === 'related' ? S.f.relProps : S.f.relRestr; }
 
+function arcFor(map, a, b, cls, faint, tag) {
+  const key = a.i + '>' + b.i + (tag || '') + (faint ? 'f' : '');
+  let arc = map.get(key);
+  if (!arc) { arc = { a: a, b: b, cls: cls, labels: [], n: 0, hidden: false, faint: faint, obs: null, decl: false }; map.set(key, arc); }
+  return arc;
+}
 function collectArcs(rels, faint, map) {
   for (let j = 0; j < rels.length; j++) {
     const r = rels[j];
@@ -619,15 +627,42 @@ function collectArcs(rels, faint, map) {
     const na = nodes[r.s], nb = nodes[r.o];
     if (!na || !nb) continue;
     const a = visOf(na), b = visOf(nb), cls = r.k === 'prop' || r.k === 'related' ? 'rel' : 'restr';
-    const key = a.i + '>' + b.i + (faint ? 'f' : '');
-    let arc = map.get(key);
-    if (!arc) { arc = { a: a, b: b, cls: cls, labels: [], n: 0, hidden: false, faint: faint }; map.set(key, arc); }
-    else if (cls === 'rel') arc.cls = 'rel';
+    const arc = arcFor(map, a, b, cls, faint);
+    if (!arc.decl) { arc.cls = cls; arc.decl = true; } else if (cls === 'rel') arc.cls = 'rel';
     arc.n++;
     if (a !== na || b !== nb) arc.hidden = true;
     const l = relLabel(r);
     if (arc.labels.indexOf(l) < 0) arc.labels.push(l);
   }
+}
+/* Statements between individuals, counted per pair of classes. */
+function collectObs(list, faint, map) {
+  if (!S.f.relObs) return;
+  for (let j = 0; j < list.length; j++) {
+    const r = list[j], na = nodes[r.s], nb = nodes[r.o];
+    if (!na || !nb) continue;
+    const a = visOf(na), b = visOf(nb), arc = arcFor(map, a, b, 'obs', faint);
+    if (a !== na || b !== nb) arc.hidden = true;
+    if (!arc.obs) arc.obs = new Map();
+    arc.obs.set(r.p, (arc.obs.get(r.p) || 0) + r.n);
+  }
+}
+/* The statements of one individual, drawn between its classes and the classes of what it is linked to. */
+function indArcs(i, map) {
+  if (!S.f.relObs) return;
+  const ind = M.inds[i];
+  const add = (ta, tb, label) => {
+    for (let x = 0; x < ta.length; x++) for (let y = 0; y < tb.length; y++) {
+      const na = nodes[ta[x]], nb = nodes[tb[y]];
+      if (!na || !nb) continue;
+      const a = visOf(na), b = visOf(nb), arc = arcFor(map, a, b, 'obs', false, 'i');
+      if (a !== na || b !== nb) arc.hidden = true;
+      if (arc.labels.indexOf(label) < 0) arc.labels.push(label);
+    }
+  };
+  for (let q = 0; q < ind.out.length; q += 2) add(ind.types, M.inds[ind.out[q + 1]].types, pname[ind.out[q]]);
+  const inn = indIn[i];
+  for (let q = 0; q < inn.length; q += 2) add(M.inds[inn[q + 1]].types, ind.types, pname[inn[q]]);
 }
 function secondaryArcs(n, faint, map) {
   if (!S.f.secondary || n.i < 0) return;
@@ -636,31 +671,38 @@ function secondaryArcs(n, faint, map) {
     const pn = nodes[ps[j]];
     if (!pn || pn === n.parent) continue;
     const b = visOf(pn), key = n.i + '^' + b.i + (faint ? 'f' : '');
-    if (!map.has(key)) map.set(key, { a: n, b: b, cls: 'sec', labels: [], n: 1, hidden: b !== pn, faint: faint });
+    if (!map.has(key)) map.set(key, { a: n, b: b, cls: 'sec', labels: [], n: 1, hidden: b !== pn, faint: faint, obs: null, decl: true });
   }
 }
 function buildArcs() {
   const sel = S.sel, hn = hoverNode();
-  const key = gen + '|' + (sel ? sel.t + sel.i : '') + '|' + (hn ? hn.i : '') + '|' + S.f.relProps + S.f.relRestr + S.f.secondary;
+  const key = gen + '|' + (sel ? sel.t + sel.i : '') + '|' + (hn ? hn.i : '') + '|' + S.f.relProps + S.f.relRestr + S.f.secondary + S.f.relObs;
   if (key === arcKey) return;
   arcKey = key; arcNote = '';
   const map = new Map();
   if (sel && sel.t === 'c' && nodes[sel.i] && isVisible(nodes[sel.i])) {
-    collectArcs(relOut[sel.i], false, map); collectArcs(relIn[sel.i], false, map);
+    collectArcs(relOut[sel.i], false, map); collectArcs(relIn[sel.i].filter((r) => r.s !== r.o), false, map);
+    collectObs(obsOut[sel.i], false, map); collectObs(obsIn[sel.i].filter((r) => r.s !== r.o), false, map);
     secondaryArcs(nodes[sel.i], false, map);
   } else if (sel && sel.t === 'p') {
     collectArcs(propRels[sel.i], false, map);
+    collectObs(obsByProp[sel.i], false, map);
+  } else if (sel && sel.t === 'i') {
+    indArcs(sel.i, map);
   }
   if (hn && hn.i >= 0 && !(sel && sel.t === 'c' && sel.i === hn.i)) {
-    collectArcs(relOut[hn.i], true, map); collectArcs(relIn[hn.i], true, map);
+    collectArcs(relOut[hn.i], true, map); collectArcs(relIn[hn.i].filter((r) => r.s !== r.o), true, map);
+    collectObs(obsOut[hn.i], true, map); collectObs(obsIn[hn.i].filter((r) => r.s !== r.o), true, map);
     secondaryArcs(hn, true, map);
   }
   arcList = Array.from(map.values());
   if (arcList.length > 400) { arcNote = 'Showing 400 of ' + nf.format(arcList.length) + ' links'; arcList.length = 400; }
   for (let j = 0; j < arcList.length; j++) {
-    const a = arcList[j];
-    a.text = a.labels.length <= 2 ? a.labels.join(', ') : a.labels[0] + ', ' + a.labels[1] + ' +' + (a.labels.length - 2);
-    if (a.n > a.labels.length) a.text += ' ×' + a.n;
+    const a = arcList[j], parts = a.labels.slice();
+    /* a count in brackets says how many statements between individuals stand behind the link */
+    if (a.obs) a.obs.forEach((n, pi) => { const nm = pname[pi], ix = parts.indexOf(nm), t = nm + ' (' + nf.format(n) + ')'; if (ix >= 0) parts[ix] = t; else parts.push(t); });
+    a.text = parts.length <= 2 ? parts.join(', ') : parts[0] + ', ' + parts[1] + ' +' + (parts.length - 2);
+    if (a.decl && !a.obs && a.n > a.labels.length) a.text += ' \u00d7' + a.n;
   }
 }
 
@@ -677,12 +719,12 @@ function drawArcs(c, k, ex) {
   for (let j = 0; j < arcList.length; j++) {
     const a = arcList[j];
     if (ex && a.faint) continue;
-    const A = a.a, B = a.b, col = a.cls === 'rel' ? T.rel : a.cls === 'restr' ? T.restr : T.ink2;
-    let p0x, p3x, c1x, c2x, dir;
+    const A = a.a, B = a.b, col = a.cls === 'rel' ? T.rel : a.cls === 'restr' ? T.restr : a.cls === 'obs' ? T.ink : T.ink2;
+    let p0x, p3x, c1x, c2x, dir, side = 0;
     const p0y = A.y, p3y = B.y;
-    c.globalAlpha = a.faint ? 0.5 : 1;
+    c.globalAlpha = a.faint ? 0.5 : a.cls === 'obs' && arcList.length > 12 ? 0.6 : 1;
     c.strokeStyle = col; c.fillStyle = col;
-    c.lineWidth = (a.cls === 'sec' ? 1.3 : 1.7) / k;
+    c.lineWidth = (a.cls === 'sec' ? 1.3 : a.cls === 'obs' ? 1.45 : 1.7) / k;
     c.setLineDash(a.cls === 'sec' ? [2 / k, 4 / k] : a.hidden ? [6 / k, 4 / k] : []);
     if (A === B) {
       const x = right(A) + 4 / k, r = 8 / k;
@@ -693,7 +735,7 @@ function drawArcs(c, k, ex) {
     }
     if (B.x > A.x + 1) { p0x = right(A); p3x = B.x - 9; const dx = Math.max(40, p3x - p0x); c1x = p0x + dx * 0.5; c2x = p3x - dx * 0.5; dir = 1; }
     else if (B.x < A.x - 1) { p0x = A.x - 9; p3x = right(B) + 3; const dx = Math.max(40, p0x - p3x); c1x = p0x - dx * 0.5; c2x = p3x + dx * 0.5; dir = -1; }
-    else { p0x = right(A); p3x = right(B) + 3; const bulge = Math.min(150, 34 + Math.abs(p3y - p0y) * 0.22); c1x = c2x = Math.max(p0x, p3x) + bulge; dir = -1; }
+    else { p0x = right(A); p3x = right(B) + 3; const bulge = Math.min(150, 34 + Math.abs(p3y - p0y) * 0.22); c1x = c2x = Math.max(p0x, p3x) + bulge; dir = -1; side = 1; }
     const hx = p3x - dir * 7 / k;
     c.beginPath(); c.moveTo(p0x, p0y); c.bezierCurveTo(c1x, p0y, c2x, p3y, hx, p3y); c.stroke();
     c.setLineDash([]);
@@ -702,7 +744,7 @@ function drawArcs(c, k, ex) {
     if (a.cls !== 'sec') {
       const ts = [0.5, 0.38, 0.62, 0.27, 0.73, 0.16, 0.84];
       const pts = ts.map((t) => { const u = 1 - t; return [u * u * u * p0x + 3 * u * u * t * c1x + 3 * u * t * t * c2x + t * t * t * hx, (u * u * u + 3 * u * u * t) * p0y + (3 * u * t * t + t * t * t) * p3y]; });
-      arcChips.push([pts, 0, a, col, false]);
+      arcChips.push([pts, side, a, col, false]);
     }
   }
   c.globalAlpha = 1;
@@ -712,7 +754,7 @@ function drawArcs(c, k, ex) {
 function drawArcChips(c, k, smallLabels) {
   const chips = arcChips;
   if (!chips.length) return;
-  const placed = [], fs = 11 / k, many = chips.length > 36;
+  const placed = [], fs = 11 / k, many = chips.length > 14;
   const names = [];
   if (!smallLabels && dn.length < 5000) for (let j = 0; j < dn.length; j++) { const n = dn[j]; names.push(n.x - 7, n.y - 9, arcRight(n), n.y + 9); }
   const free = (x, y, w, h) => {
@@ -721,16 +763,23 @@ function drawArcChips(c, k, smallLabels) {
     return 2;
   };
   c.font = '600 ' + fs + 'px ' + FONT; c.textBaseline = 'middle';
+  chips.sort((x, y) => (y[4] ? 1 : 0) - (x[4] ? 1 : 0));
   for (let j = 0; j < chips.length; j++) {
     const ch = chips[j], a = ch[2];
     const text = trunc(a.text, 44), tw = c.measureText(text).width, w = tw + 12 / k, h = 18 / k;
     let x, y;
     if (ch[4]) { x = ch[0]; y = ch[1] - h / 2; }
     else {
-      let best = -1, bz = 0;
-      for (let z = 0; z < ch[0].length; z++) { const f = free(ch[0][z][0] - w / 2, ch[0][z][1] - h / 2, w, h); if (f > best) { best = f; bz = z; if (f === 2) break; } }
+      const px = (pt) => (ch[1] ? pt[0] + 5 / k : pt[0] - w / 2);
+      let best = -1, bx = 0, by = 0;
+      for (let z = 0; z < ch[0].length && best < 2; z++) { const f = free(px(ch[0][z]), ch[0][z][1] - h / 2, w, h); if (f > best) { best = f; bx = px(ch[0][z]); by = ch[0][z][1] - h / 2; } }
+      /* still on top of something: move it up or down in steps */
+      for (let st = 1; st <= 4 && best < 2 && !many; st++) for (let sg = -1; sg <= 1 && best < 2; sg += 2) {
+        const yy = ch[0][0][1] - h / 2 + sg * st * (h + 3 / k), f = free(px(ch[0][0]), yy, w, h);
+        if (f > best) { best = f; bx = px(ch[0][0]); by = yy; }
+      }
       if (best === 0 && (many || a.faint)) continue;
-      x = ch[0][bz][0] - w / 2; y = ch[0][bz][1] - h / 2;
+      x = bx; y = by;
     }
     placed.push([x - 2 / k, y - 1 / k, x + w + 2 / k, y + h + 1 / k]);
     c.globalAlpha = a.faint ? 0.85 : 1;
@@ -811,61 +860,97 @@ function hitTree(sx, sy) {
 let F = null;
 const fcam = { x: 0, y: 0, k: 1 };
 
-function neigh(a, cat) {
-  const out = [];
-  if (cat === 'sup') return par[a];
-  if (cat === 'sub') return kidsAll[a];
-  if (cat === 'out') { relOut[a].forEach((r) => { if (nodes[r.o] && r.o !== a && out.indexOf(r.o) < 0) out.push(r.o); }); return out; }
-  if (cat === 'in') { relIn[a].forEach((r) => { if (nodes[r.s] && r.s !== a && out.indexOf(r.s) < 0) out.push(r.s); }); return out; }
-  M.classes[a].eq.forEach((e) => { if (e.t === 'c' && nodes[e.c] && out.indexOf(e.c) < 0) out.push(e.c); });
+function indBranch(i) {
+  const ts = M.inds[i].types;
+  for (let j = 0; j < ts.length; j++) if (nodes[ts[j]]) return nodes[ts[j]].branch;
+  return -1;
+}
+/* Neighbours of a focus node as [kind, index] pairs; kind is 'c' for a class and 'i' for an individual. */
+function neigh(o, cat, kind) {
+  const out = [], seen = new Set();
+  const push = (k, i) => { const key = k + i; if (!seen.has(key) && (k === 'i' || nodes[i])) { seen.add(key); out.push([k, i]); } };
+  if (o.k === 'i') {
+    const ind = M.inds[o.i];
+    if (cat === 'sup') { if (o.hop === 0) ind.types.forEach((t) => push('c', t)); }
+    else if (cat === 'out') { for (let q = 0; q < ind.out.length; q += 2) if (ind.out[q + 1] !== o.i) push('i', ind.out[q + 1]); }
+    else if (cat === 'in') { const inn = indIn[o.i]; for (let q = 0; q < inn.length; q += 2) if (inn[q + 1] !== o.i) push('i', inn[q + 1]); }
+    return out;
+  }
+  if (kind === 'i') return out;
+  const a = o.i;
+  if (cat === 'sup') par[a].forEach((p) => push('c', p));
+  else if (cat === 'sub') kidsAll[a].forEach((p) => push('c', p));
+  else if (cat === 'out') {
+    relOut[a].forEach((r) => { if (r.o !== a) push('c', r.o); });
+    if (S.f.relObs) obsOut[a].forEach((r) => { if (r.o !== a) push('c', r.o); });
+  } else if (cat === 'in') {
+    relIn[a].forEach((r) => { if (r.s !== a) push('c', r.s); });
+    if (S.f.relObs) obsIn[a].forEach((r) => { if (r.s !== a) push('c', r.s); });
+  } else M.classes[a].eq.forEach((e) => { if (e.t === 'c') push('c', e.c); });
   return out;
 }
 
-function buildFocus(center) {
-  const prev = F ? F.map : null, prevCenter = F ? F.nodes[0] : null;
+function buildFocus(center, kind) {
+  kind = kind || 'c';
+  const prev = F && F.kind === kind ? F.map : null, prevCenter = F ? F.nodes[0] : null;
   const map = new Map(), fn = [], omitted = new Set();
   mctx.font = '600 ' + LABEL_FONT;
-  const add = (i, hop, from, cat) => {
-    const t = trunc(cname[i], 34);
-    const o = { i: i, hop: hop, from: from, cat: cat, t: t, w: Math.ceil(mctx.measureText(t).width) + 26, h: 30, x: 0, y: 0, ox: 0, oy: 0, nx: 0, ny: 0, ang: 0, stub: false, branch: nodes[i].branch };
-    map.set(i, o); fn.push(o);
+  const add = (k, i, hop, from, cat) => {
+    const name = k === 'c' ? cname[i] : indName(M.inds[i]), t = trunc(name, 34);
+    const o = { k: k, i: i, key: k + i, hop: hop, from: from, cat: cat, t: t, w: Math.ceil(mctx.measureText(t).width) + 26, h: 30, x: 0, y: 0, ox: 0, oy: 0, nx: 0, ny: 0, ang: 0, stub: false,
+      branch: k === 'c' ? nodes[i].branch : indBranch(i) };
+    map.set(o.key, o); fn.push(o);
     return o;
   };
-  add(center, 0, null, 'c');
-  let frontier = [center];
+  add(kind, center, 0, null, 'c');
+  let frontier = [fn[0]];
   const cats = ['sup', 'out', 'in', 'eq', 'sub'];
   for (let hop = 1; hop <= S.hops; hop++) {
     const next = [];
     for (let ci = 0; ci < cats.length; ci++) for (let f = 0; f < frontier.length; f++) {
-      const nb = neigh(frontier[f], cats[ci]);
+      const nb = neigh(frontier[f], cats[ci], kind);
       for (let j = 0; j < nb.length; j++) {
-        const b = nb[j];
-        if (map.has(b) || !nodes[b]) continue;
-        if (fn.length >= S.cap) { omitted.add(b); continue; }
-        add(b, hop, map.get(frontier[f]), cats[ci]); next.push(b);
+        const key = nb[j][0] + nb[j][1];
+        if (map.has(key)) continue;
+        if (fn.length >= S.cap) { omitted.add(key); continue; }
+        next.push(add(nb[j][0], nb[j][1], hop, frontier[f], cats[ci]));
       }
     }
     frontier = next;
   }
   const em = new Map();
   const edge = (a, b, type, label) => {
-    const key = a + '>' + b + (type === 'isa' ? 'i' : type === 'eq' ? 'e' : 'r');
+    const key = a.key + '>' + b.key + (type === 'isa' ? 'i' : type === 'eq' ? 'e' : 'r');
     let e = em.get(key);
-    if (!e) { e = { a: map.get(a), b: map.get(b), type: type, labels: [], text: '' }; em.set(key, e); }
+    if (!e) { e = { a: a, b: b, type: type, labels: [], text: '' }; em.set(key, e); }
+    else if (type === 'rel' || (type === 'restr' && e.type === 'obs')) e.type = type;
     if (label && e.labels.indexOf(label) < 0) e.labels.push(label);
-    if (type === 'rel' && e.type === 'restr') e.type = 'rel';
+    return e;
   };
   fn.forEach((o) => {
-    par[o.i].forEach((p) => { if (map.has(p)) edge(o.i, p, 'isa'); });
-    relOut[o.i].forEach((r) => { if (map.has(r.o)) edge(o.i, r.o, r.k === 'prop' || r.k === 'related' ? 'rel' : 'restr', relLabel(r)); });
-    M.classes[o.i].eq.forEach((e) => { if (e.t === 'c' && map.has(e.c) && o.i < e.c) edge(o.i, e.c, 'eq', 'equivalent to'); });
+    if (o.k === 'i') {
+      const ind = M.inds[o.i];
+      if (o.hop === 0) ind.types.forEach((t) => { const c = map.get('c' + t); if (c) edge(o, c, 'isa'); });
+      for (let q = 0; q < ind.out.length; q += 2) { const tg = map.get('i' + ind.out[q + 1]); if (tg) edge(o, tg, 'obs', pname[ind.out[q]]); }
+      return;
+    }
+    if (kind === 'i') return;
+    par[o.i].forEach((p) => { const c = map.get('c' + p); if (c) edge(o, c, 'isa'); });
+    relOut[o.i].forEach((r) => { const c = map.get('c' + r.o); if (c) edge(o, c, r.k === 'prop' || r.k === 'related' ? 'rel' : 'restr', relLabel(r)); });
+    if (S.f.relObs) obsOut[o.i].forEach((r) => {
+      const c = map.get('c' + r.o);
+      if (!c) return;
+      const e = edge(o, c, 'obs'), nm = pname[r.p], ix = e.labels.indexOf(nm), t = nm + ' (' + nf.format(r.n) + ')';
+      if (ix >= 0) e.labels[ix] = t; else e.labels.push(t);
+    });
+    M.classes[o.i].eq.forEach((e) => { if (e.t === 'c' && o.i < e.c) { const c = map.get('c' + e.c); if (c) edge(o, c, 'eq', 'equivalent to'); } });
   });
   const edges = Array.from(em.values());
-  edges.forEach((e) => { e.text = e.labels.length <= 2 ? e.labels.join(', ') : e.labels[0] + ', ' + e.labels[1] + ' +' + (e.labels.length - 2); e.rev = em.has(e.b.i + '>' + e.a.i + 'r'); });
+  edges.forEach((e) => { e.text = e.labels.length <= 2 ? e.labels.join(', ') : e.labels[0] + ', ' + e.labels[1] + ' +' + (e.labels.length - 2); e.rev = em.has(e.b.key + '>' + e.a.key + 'r'); });
   let stub = null;
   if (omitted.size) {
     const t = '+' + nf.format(omitted.size) + ' more';
-    stub = { i: -2, hop: 1, from: fn[0], cat: 'sub', t: t, w: Math.ceil(mctx.measureText(t).width) + 26, h: 30, x: 0, y: 0, ox: 0, oy: 0, nx: 0, ny: 0, ang: 0, stub: true, branch: -1 };
+    stub = { k: 's', i: -2, key: 'stub', hop: 1, from: fn[0], cat: 'sub', t: t, w: Math.ceil(mctx.measureText(t).width) + 26, h: 30, x: 0, y: 0, ox: 0, oy: 0, nx: 0, ny: 0, ang: 0, stub: true, branch: -1 };
     fn.push(stub);
     edges.push({ a: stub, b: fn[0], type: 'stub', labels: [], text: '', rev: false });
   }
@@ -873,18 +958,18 @@ function buildFocus(center) {
   let x0 = 1e9, x1 = -1e9, y0 = 1e9, y1 = -1e9;
   fn.forEach((o) => { x0 = Math.min(x0, o.nx - o.w / 2); x1 = Math.max(x1, o.nx + o.w / 2); y0 = Math.min(y0, o.ny - o.h / 2); y1 = Math.max(y1, o.ny + o.h / 2); });
   fn.forEach((o) => {
-    const p = prev && o.i >= 0 ? prev.get(o.i) : null;
+    const p = prev && !o.stub ? prev.get(o.key) : null;
     if (p) { o.ox = p.x; o.oy = p.y; }
-    else { const src = prev && prev.get(center) ? prev.get(center) : prevCenter; o.ox = src ? src.x : 0; o.oy = src ? src.y : 0; }
+    else { const src = prev && prev.get(fn[0].key) ? prev.get(fn[0].key) : prevCenter; o.ox = src ? src.x : 0; o.oy = src ? src.y : 0; }
     o.x = o.ox; o.y = o.oy;
   });
-  F = { center: center, nodes: fn, edges: edges, map: map, omitted: omitted.size, total: fn.length - (stub ? 1 : 0) + omitted.size, box: [x0, y0, x1, y1] };
+  F = { kind: kind, center: center, title: fn[0].t, nodes: fn, edges: edges, map: map, omitted: omitted.size, total: fn.length - (stub ? 1 : 0) + omitted.size, box: [x0, y0, x1, y1] };
   const padT = 64, pad = 40;
   const k = Math.max(0.3, Math.min(1, (W - pad * 2) / (x1 - x0), (H - padT - pad - 40) / (y1 - y0)));
   const c1 = { x: W / 2 - (x0 + x1) / 2 * k, y: padT + (H - padT - pad - 40) / 2 - (y0 + y1) / 2 * k, k: k };
-  if (REDUCED || !prev) {
+  if (REDUCED || !prevCenter) {
     fn.forEach((o) => { o.x = o.nx; o.y = o.ny; });
-    if (!prev || REDUCED) { fcam.x = c1.x; fcam.y = c1.y; fcam.k = c1.k; }
+    fcam.x = c1.x; fcam.y = c1.y; fcam.k = c1.k;
     anim = null;
   } else anim = { t0: performance.now(), dur: 380, nodes: false, focus: true, c0: null, c1: null, f0: { x: fcam.x, y: fcam.y, k: fcam.k }, f1: c1 };
   renderFocusBar();
@@ -981,7 +1066,7 @@ function renderFocus(c, W, H, cam, ex) {
   c.font = '600 11px ' + FONT;
   for (let j = 0; j < F.edges.length; j++) {
     const e = F.edges[j], A = e.a, B = e.b;
-    const col = e.type === 'rel' ? T.rel : e.type === 'restr' ? T.restr : e.type === 'eq' ? T.ink2 : T.ink3;
+    const col = e.type === 'rel' ? T.rel : e.type === 'restr' ? T.restr : e.type === 'obs' ? T.ink : e.type === 'eq' ? T.ink2 : T.ink3;
     const lit = hov && (hov === A || hov === B), main = A === F.nodes[0] || B === F.nodes[0] || A.hop + B.hop <= 2;
     c.strokeStyle = col; c.fillStyle = col;
     c.lineWidth = (e.type === 'isa' || e.type === 'stub' ? 1.3 : 1.7) * (lit ? 1.5 : 1);
@@ -1008,13 +1093,24 @@ function renderFocus(c, W, H, cam, ex) {
     const ctr = F.nodes[0], oth = A === ctr ? B : B === ctr ? A : null;
     if (oth && oth.hop === 1 && e.cw && Math.abs(oth.x - ctr.x) > (oth.w + ctr.w) / 2 + e.cw + 40) {
       const sd = oth.x > ctr.x ? 1 : -1, toOther = A === ctr;
+      const off = e.rev ? (toOther ? -9.5 : 9.5) : 0, yo = oth.y + off, yc = ctr.y + off * 0.45;
       const xc = ctr.x + sd * (ctr.w / 2 + 3), xo = oth.x - sd * (oth.w / 2 + 3), xs = xo - sd * (e.cw + 24), xm = (xc + xs) / 2;
       const tipC = toOther || e.type === 'eq' ? 0 : 8, tipO = toOther && e.type !== 'eq' ? 8 : 0;
-      c.beginPath(); c.moveTo(xc + sd * tipC, ctr.y); c.bezierCurveTo(xm, ctr.y, xm, oth.y, xs, oth.y); c.lineTo(xo - sd * tipO, oth.y); c.stroke();
+      c.beginPath(); c.moveTo(xc + sd * tipC, yc); c.bezierCurveTo(xm, yc, xm, yo, xs, yo); c.lineTo(xo - sd * tipO, yo); c.stroke();
       c.setLineDash([]);
-      if (tipO) { c.beginPath(); c.moveTo(xo, oth.y); c.lineTo(xo - sd * 8, oth.y - 4); c.lineTo(xo - sd * 8, oth.y + 4); c.closePath(); c.fill(); }
-      if (tipC) { c.beginPath(); c.moveTo(xc, ctr.y); c.lineTo(xc + sd * 8, ctr.y - 4); c.lineTo(xc + sd * 8, ctr.y + 4); c.closePath(); c.fill(); }
-      chips.push([xo - sd * (12 + e.cw / 2), oth.y, e.text, col, lit, true]);
+      if (tipO) { c.beginPath(); c.moveTo(xo, yo); c.lineTo(xo - sd * 8, yo - 4); c.lineTo(xo - sd * 8, yo + 4); c.closePath(); c.fill(); }
+      if (tipC) { c.beginPath(); c.moveTo(xc, yc); c.lineTo(xc + sd * 8, yc - 4); c.lineTo(xc + sd * 8, yc + 4); c.closePath(); c.fill(); }
+      chips.push([xo - sd * (12 + e.cw / 2), yo, e.text, col, lit, true]);
+      continue;
+    }
+    /* a link between two direct neighbours in the same column bows outwards, with its label beside it */
+    if (oth === null && A !== B && A.hop === 1 && B.hop === 1 && e.type !== 'isa' && e.type !== 'stub' && Math.abs(A.x - B.x) < (A.w + B.w) / 2 && Math.abs(A.y - B.y) > 1) {
+      const sd = A.x >= ctr.x ? 1 : -1, xa = A.x + sd * (A.w / 2 + 3), xb = B.x + sd * (B.w / 2 + 3);
+      const xm = (sd > 0 ? Math.max(xa, xb) : Math.min(xa, xb)) + sd * (34 + Math.min(70, Math.abs(A.y - B.y) * 0.3)), tip = e.type === 'eq' ? 0 : 8;
+      c.beginPath(); c.moveTo(xa, A.y); c.bezierCurveTo(xm, A.y, xm, B.y, xb + sd * tip, B.y); c.stroke();
+      c.setLineDash([]);
+      if (tip) { c.beginPath(); c.moveTo(xb, B.y); c.lineTo(xb + sd * 8, B.y - 4); c.lineTo(xb + sd * 8, B.y + 4); c.closePath(); c.fill(); }
+      if (e.text) chips.push([(xa + 6 * xm + xb) / 8 + sd * (e.cw / 2 + 6), (A.y + B.y) / 2, e.text, col, lit, false]);
       continue;
     }
     let mx = (A.x + B.x) / 2, my = (A.y + B.y) / 2;
@@ -1056,7 +1152,7 @@ function renderFocus(c, W, H, cam, ex) {
   c.globalAlpha = 1;
   for (let j = F.nodes.length - 1; j >= 0; j--) {
     const o = F.nodes[j], x = o.x - o.w / 2, y = o.y - o.h / 2;
-    rr(c, x, y, o.w, o.h, 8);
+    rr(c, x, y, o.w, o.h, o.k === 'i' ? o.h / 2 : 8);
     if (j === 0) { c.fillStyle = T.ink; c.fill(); }
     else {
       c.fillStyle = T.surface; c.fill();

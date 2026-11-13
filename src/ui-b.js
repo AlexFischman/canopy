@@ -63,7 +63,7 @@ function applyTheme(name) {
 
 /* ---------- model ---------- */
 
-let domProps = [], rngProps = [], sIdx = [];
+let domProps = [], rngProps = [], sIdx = [], propUse = [];
 
 function setModel(model, label, sample) {
   M = model; fileLabel = label; isSample = !!sample;
@@ -88,6 +88,16 @@ function setModel(model, label, sample) {
   relOut = C.map(() => []); relIn = C.map(() => []); propRels = P.map(() => []); subProps = P.map(() => []);
   domProps = C.map(() => []); rngProps = C.map(() => []);
   M.rels.forEach((r) => { relOut[r.s].push(r); relIn[r.o].push(r); propRels[r.p].push(r); });
+  obsOut = C.map(() => []); obsIn = C.map(() => []); obsByProp = P.map(() => []);
+  M.obs.forEach((r) => { obsOut[r.s].push(r); obsIn[r.o].push(r); obsByProp[r.p].push(r); });
+  indIn = M.inds.map(() => []); propUse = P.map(() => []);
+  M.inds.forEach((ind, i) => {
+    for (let q = 0; q < ind.out.length; q += 2) {
+      indIn[ind.out[q + 1]].push(ind.out[q], i);
+      const u = propUse[ind.out[q]];
+      if (u.length < 400) u.push(i, ind.out[q + 1]);
+    }
+  });
   P.forEach((p, i) => { p.sup.forEach((s) => subProps[s].push(i)); p.dom.forEach((c) => domProps[c].push(i)); p.rng.forEach((c) => rngProps[c].push(i)); });
   S.sel = null; S.hover = null; S.query = ''; matches = null; F = null; S.cap = 40; S.hops = 1; S.tab = 'details';
   S.f.dep = false; S.f.ext = true;
@@ -111,7 +121,7 @@ function rebuild(keepOpen) {
   if (!keepOpen) { const c = fitCam(true); cam.x = c.x; cam.y = c.y; cam.k = c.k; }
   $('empty').hidden = true;
   if (!M.classes.length) showEmpty();
-  if (S.view === 'focus') { if (S.sel && S.sel.t === 'c') buildFocus(S.sel.i); else F = null; }
+  if (S.view === 'focus') { if (S.sel && S.sel.t === 'c') buildFocus(S.sel.i); else if (S.sel && S.sel.t === 'i') buildFocus(S.sel.i, 'i'); else F = null; }
   draw();
 }
 
@@ -160,6 +170,16 @@ function selectClass(i, opts) {
   else buildFocus(i);
   renderPanel();
 }
+function selectInd(i) {
+  S.sel = { t: 'i', i: i }; S.tab = 'details'; arcKey = '';
+  if (S.view === 'tree') {
+    const ts = M.inds[i].types;
+    let tn = null;
+    for (let j = 0; j < ts.length && !tn; j++) tn = nodes[ts[j]] || null;
+    if (tn) reveal(tn, false); else draw();
+  } else buildFocus(i, 'i');
+  renderPanel();
+}
 function selectProp(i) {
   S.sel = { t: 'p', i: i }; S.tab = 'details'; arcKey = '';
   renderPanel(); draw();
@@ -179,6 +199,7 @@ function setView(v, quiet) {
   if (v === 'focus') {
     mini.hidden = true;
     if (S.sel && S.sel.t === 'c' && nodes[S.sel.i]) { F = null; buildFocus(S.sel.i); }
+    else if (S.sel && S.sel.t === 'i') { F = null; buildFocus(S.sel.i, 'i'); }
     else { F = null; renderFocusBar(); }
   } else {
     anim = null;
@@ -197,6 +218,7 @@ function buildSearchIndex() {
   const C = M.classes, P = M.props;
   for (let i = 0; i < C.length; i++) if (nodes[i]) sIdx.push({ t: 'c', i: i, l: cname[i].toLowerCase(), id: localName(C[i].iri).toLowerCase(), alt: C[i].alts.length ? C[i].alts.join('\u0001').toLowerCase() : '' });
   for (let i = 0; i < P.length; i++) sIdx.push({ t: 'p', i: i, l: pname[i].toLowerCase(), id: localName(P[i].iri).toLowerCase(), alt: '' });
+  for (let i = 0; i < M.inds.length; i++) sIdx.push({ t: 'i', i: i, l: indName(M.inds[i]).toLowerCase(), id: localName(M.inds[i].iri).toLowerCase(), alt: '' });
 }
 let results = [], resActive = 0, resTotal = 0;
 function runSearch(q, quiet) {
@@ -216,7 +238,7 @@ function runSearch(q, quiet) {
       else if (p > 0) sc = /[\s_\-:\/.(]/.test(e.l.charAt(p - 1)) ? 2 : 3;
       else if (e.id.indexOf(s) >= 0) sc = 4;
       else if (e.alt && e.alt.indexOf(s) >= 0) { sc = 5; const a = e.alt.split('\u0001'); for (let z = 0; z < a.length; z++) if (a[z].indexOf(s) >= 0) { alt = a[z]; break; } }
-      else if (byIri && (e.t === 'c' ? M.classes[e.i].iri : M.props[e.i].iri).toLowerCase().indexOf(s) >= 0) sc = 6;
+      else if (byIri && (e.t === 'c' ? M.classes[e.i].iri : e.t === 'p' ? M.props[e.i].iri : M.inds[e.i].iri).toLowerCase().indexOf(s) >= 0) sc = 6;
       if (sc >= 0) out.push({ e: e, sc: sc, pos: p, alt: alt });
     }
     out.sort((a, b) => a.sc - b.sc || a.e.l.length - b.e.l.length || (a.e.l < b.e.l ? -1 : a.e.l > b.e.l ? 1 : 0));
@@ -240,7 +262,7 @@ function renderResults(s) {
   box.hidden = false;
   if (!results.length) { box.appendChild(h('div', { class: 'res-note', text: 'Nothing matches "' + S.query.trim() + '". Search looks at labels, identifiers and synonyms.' })); return; }
   results.forEach((r, j) => {
-    const e = r.e, name = e.t === 'c' ? cname[e.i] : pname[e.i];
+    const e = r.e, name = e.t === 'c' ? cname[e.i] : e.t === 'p' ? pname[e.i] : indName(M.inds[e.i]);
     const nm = h('span', { class: 'nm' });
     if (r.pos >= 0) { nm.appendChild(document.createTextNode(name.slice(0, r.pos))); nm.appendChild(h('b', { text: name.slice(r.pos, r.pos + s.length) })); nm.appendChild(document.createTextNode(name.slice(r.pos + s.length))); }
     else nm.textContent = name;
@@ -249,9 +271,12 @@ function renderResults(s) {
       const parts = [];
       for (let a = nodes[e.i].parent; a && a !== root && parts.length < 3; a = a.parent) parts.unshift(a.name);
       pth = r.alt ? 'also called ' + r.alt : parts.length ? parts.join(' › ') : compact(M.classes[e.i].iri);
+    } else if (e.t === 'i') {
+      const ts = M.inds[e.i].types;
+      pth = ts.length ? 'Individual of ' + ts.slice(0, 3).map((t) => cname[t]).join(', ') : 'Individual without a class';
     } else pth = propKindName(M.props[e.i]) + propSignature(M.props[e.i]);
     const row = h('div', { class: 'res' + (j === resActive ? ' active' : ''), role: 'option', onmousedown: (ev) => { ev.preventDefault(); goResult(j); }, onmousemove: () => { if (resActive !== j) { resActive = j; markActive(); } } },
-      e.t === 'c' ? h('span', { class: 'dot', style: 'background:' + branchColor(nodes[e.i].branch) }) : h('span', { class: 'pglyph ' + (M.props[e.i].kind === 'data' ? 'data' : M.props[e.i].kind === 'object' ? '' : 'other') }),
+      e.t === 'c' ? h('span', { class: 'dot', style: 'background:' + branchColor(nodes[e.i].branch) }) : e.t === 'i' ? h('span', { class: 'iglyph', style: 'border-color:' + branchColor(indBranch(e.i)) }) : h('span', { class: 'pglyph ' + (M.props[e.i].kind === 'data' ? 'data' : M.props[e.i].kind === 'object' ? '' : 'other') }),
       nm, h('span', { class: 'pth', text: pth }));
     box.appendChild(row);
   });
@@ -267,7 +292,7 @@ function goResult(j) {
   if (!r) return;
   $('results').hidden = true;
   $('search').blur();
-  if (r.e.t === 'c') selectClass(r.e.i, { center: true }); else selectProp(r.e.i);
+  if (r.e.t === 'c') selectClass(r.e.i, { center: true }); else if (r.e.t === 'i') selectInd(r.e.i); else selectProp(r.e.i);
 }
 
 /* ---------- panel ---------- */
@@ -285,6 +310,10 @@ function classLink(i) {
 function propLink(i) {
   const k = M.props[i].kind;
   return h('button', { class: 'lnk ' + (k === 'data' ? 'dp' : 'p'), title: M.props[i].iri, onclick: () => selectProp(i) }, pname[i]);
+}
+function indLink(i) {
+  return h('button', { class: 'lnk', title: M.inds[i].iri, onclick: () => selectInd(i) },
+    h('span', { class: 'iglyph', style: 'border-color:' + branchColor(indBranch(i)) }), indName(M.inds[i]));
 }
 function propKindName(p) { return p.kind === 'object' ? 'Object property' : p.kind === 'data' ? 'Data property' : p.kind === 'annotation' ? 'Annotation property' : 'Property'; }
 function dtName(iri) { return compact(iri); }
@@ -385,6 +414,7 @@ function renderPanel() {
   if (S.tab === 'props') renderPropList(pb);
   else if (S.sel && S.sel.t === 'c') renderClass(pb, S.sel.i);
   else if (S.sel && S.sel.t === 'p') renderProp(pb, S.sel.i);
+  else if (S.sel && S.sel.t === 'i') renderInd(pb, S.sel.i);
   else renderOverview(pb);
   pb.scrollTop = 0;
 }
@@ -471,7 +501,14 @@ function renderClass(pb, i) {
     const arr = Array.from(dj).sort((a, b) => collator.compare(cname[a], cname[b]));
     if (arr.length) pb.appendChild(sec('Disjoint with', arr.length, capped(arr, classLink, 12)));
   }
-  if (c.ind.length) pb.appendChild(sec('Individuals', c.ind.length, capped(c.ind, (x) => h('span', { title: M.inds[x].iri, text: indName(M.inds[x]) }), 20)));
+  if (c.ind.length) pb.appendChild(sec('Individuals', c.ind.length, capped(c.ind, indLink, 20)));
+  if (obsOut[i].length || obsIn[i].length) {
+    const rows = obsOut[i].map((r) => [1, r]).concat(obsIn[i].filter((r) => r.s !== i).map((r) => [0, r])).sort((a, b) => b[1].n - a[1].n);
+    pb.appendChild(sec('Statements between individuals', null,
+      h('p', { class: 'note', text: 'Counted from the data, per property and class of the other individual.' }),
+      capped(rows, (r) => r[0] ? [propLink(r[1].p), h('span', { class: 'arrow', text: '\u2192' }), classLink(r[1].o), h('span', { class: 'tag', text: nf.format(r[1].n) })]
+        : [classLink(r[1].s), h('span', { class: 'arrow', text: '\u2192' }), propLink(r[1].p), h('span', { class: 'tag', text: nf.format(r[1].n) })], 20)));
+  }
   append(pb, annotations(c.ann));
 }
 
@@ -501,7 +538,44 @@ function renderProp(pb, i) {
   if (p.inv.length) pb.appendChild(sec('Inverse of', null, capped(p.inv, propLink)));
   const rs = propRels[i].filter((r) => r.k !== 'prop' && r.k !== 'related');
   if (rs.length) pb.appendChild(sec('Used in restrictions', rs.length, capped(rs, (r) => [classLink(r.s), ' ', h('span', { class: 'kw', text: r.k + (r.n !== undefined ? ' ' + r.n : '') }), ' ', classLink(r.o)])));
+  if (p.uses) {
+    const u = propUse[i], pairs = [];
+    for (let q = 0; q < u.length; q += 2) pairs.push([u[q], u[q + 1]]);
+    pb.appendChild(sec('Used in the data', p.uses, pairs.length
+      ? [pairs.length < p.uses && p.kind === 'object' && pairs.length >= 200 ? h('p', { class: 'note', text: 'The first ' + pairs.length + ' statements between individuals:' }) : null,
+        capped(pairs, (x) => [indLink(x[0]), h('span', { class: 'arrow', text: '\u2192' }), indLink(x[1])], 20)]
+      : h('p', { class: 'note', text: plural(p.uses, 'value', 'values') + ' on individuals. Open an individual to see them.' })));
+  }
   append(pb, annotations(p.ann));
+}
+
+function renderInd(pb, i) {
+  const ind = M.inds[i];
+  const kind = h('div', { class: 'kind' }, 'Individual');
+  if (!ind.types.length) kind.appendChild(h('span', { class: 'tag', text: 'no class' }));
+  if (!ind.explicit) kind.appendChild(h('span', { class: 'tag', title: 'It has no type; it counts as an individual because of the statements it takes part in.', text: 'not typed in this file' }));
+  pb.appendChild(kind);
+  pb.appendChild(h('h1', { class: 'title', text: indName(ind) }));
+  pb.appendChild(iriLine(ind.iri));
+  const acts = h('div', { class: 'acts' });
+  if (S.view === 'tree') acts.appendChild(h('button', { class: 'btn line', onclick: () => setView('focus') }, 'Focus on this'));
+  else acts.appendChild(h('button', { class: 'btn line', onclick: () => setView('tree') }, 'Show in tree'));
+  pb.appendChild(acts);
+  if (ind.types.length) pb.appendChild(sec('Instance of', ind.types.length > 1 ? ind.types.length : null, capped(ind.types, classLink)));
+  const out = [], inn = [], dv = [], ov = [];
+  for (let q = 0; q < ind.out.length; q += 2) out.push([ind.out[q], ind.out[q + 1]]);
+  for (let q = 0; q < indIn[i].length; q += 2) inn.push([indIn[i][q], indIn[i][q + 1]]);
+  for (let q = 0; q < ind.dv.length; q += 4) dv.push([ind.dv[q], ind.dv[q + 1], ind.dv[q + 2], ind.dv[q + 3]]);
+  for (let q = 0; q < ind.ov.length; q += 2) ov.push([ind.ov[q], ind.ov[q + 1]]);
+  if (out.length) pb.appendChild(sec('Statements', out.length, capped(out, (x) => [propLink(x[0]), h('span', { class: 'arrow', text: '\u2192' }), indLink(x[1])], 30)));
+  if (inn.length) pb.appendChild(sec('Referenced by', inn.length, capped(inn, (x) => [indLink(x[1]), h('span', { class: 'arrow', text: '\u2192' }), propLink(x[0])], 30)));
+  if (dv.length) pb.appendChild(sec('Data values', dv.length, capped(dv, (x) => {
+    const tag = x[2] || (x[3] && x[3] !== 'http://www.w3.org/2001/XMLSchema#string' ? compact(x[3]) : '');
+    return [propLink(x[0]), h('span', { class: 'arrow', text: ':' }), /^https?:\/\/\S+$/.test(x[1]) ? h('a', { href: x[1], target: '_blank', rel: 'noopener noreferrer', text: x[1] }) : trunc(x[1], 400), tag ? h('span', { class: 'tag', text: tag }) : null];
+  }, 30)));
+  if (ov.length) pb.appendChild(sec('Other links', ov.length, h('p', { class: 'note', text: 'Targets that are not individuals in this file.' }), capped(ov, (x) => [propLink(x[0]), h('span', { class: 'arrow', text: '\u2192' }),
+    /^https?:\/\//.test(x[1]) ? h('a', { href: x[1], target: '_blank', rel: 'noopener noreferrer', text: compact(x[1]) }) : compact(x[1])], 30)));
+  if (!out.length && !inn.length && !dv.length && !ov.length) pb.appendChild(h('div', { class: 'callout', text: 'The file says nothing about this individual beyond its name and class.' }));
 }
 
 function renderOverview(pb) {
@@ -520,6 +594,8 @@ function renderOverview(pb) {
   kv('License', o && o.license);
   kv('Statements', nf.format(st.triples));
   kv('Annotation properties', st.annotationProps ? nf.format(st.annotationProps) : '');
+  kv('Statements between individuals', st.assertions ? nf.format(st.assertions) : '');
+  kv('Data values on individuals', st.dataValues ? nf.format(st.dataValues) : '');
   if (loadInfo && !isSample) kv('Read in', (loadInfo.ms < 1000 ? Math.round(loadInfo.ms) + ' ms' : (loadInfo.ms / 1000).toFixed(1) + ' s') + (loadInfo.bytes ? ' (' + (loadInfo.bytes / 1048576 < 0.1 ? Math.max(1, Math.round(loadInfo.bytes / 1024)) + ' KB' : (loadInfo.bytes / 1048576).toFixed(1) + ' MB') + ')' : ''));
   pb.appendChild(h('section', { class: 'sec' }, dl));
   const notes = [];
@@ -541,6 +617,9 @@ function renderOverview(pb) {
     if (tops.length > 14) { const more = h('button', { class: 'more', text: 'Show all ' + nf.format(tops.length), onclick: () => { tops.slice(14, 600).forEach((k) => ul.appendChild(row(k))); more.remove(); } }); s.appendChild(more); }
     pb.appendChild(s);
   }
+  const loose = [];
+  M.inds.forEach((ind, j) => { if (!ind.types.length) loose.push(j); });
+  if (loose.length) pb.appendChild(sec('Individuals without a class', loose.length, h('p', { class: 'note', text: 'They have no place in the tree. Open one to see its statements.' }), capped(loose, indLink, 12)));
   if (o && o.imports.length) pb.appendChild(sec('Imports', o.imports.length, h('p', { class: 'note', text: 'Imports are not fetched. To see them, drop the imported files together with this one.' }),
     h('ul', { class: 'list' }, o.imports.map((x) => h('li', { class: 'iri', text: x })))));
 }
@@ -623,7 +702,7 @@ function renderFocusBar() {
     if (M.classes.length) {
       e.textContent = '';
       e.appendChild(h('div', null, h('h2', { text: 'Pick a ' + nouns()[0] + ' to focus on' }),
-        h('p', { text: 'The focus view shows one ' + nouns()[0] + ' with its parents, children and the properties that connect it to others. Search for one above, or select it in the tree first.' }),
+        h('p', { text: 'The focus view shows one ' + nouns()[0] + ' or individual with what it is connected to. Search for one above, or select it in the tree first.' }),
         h('button', { class: 'btn primary', onclick: () => setView('tree') }, 'Back to the tree')));
       e.hidden = false;
     }
@@ -631,14 +710,14 @@ function renderFocusBar() {
   }
   e.hidden = true;
   const seg = h('div', { class: 'seg', role: 'group', 'aria-label': 'Distance' });
-  [1, 2].forEach((n) => seg.appendChild(h('button', { 'aria-pressed': String(S.hops === n), title: n === 1 ? 'Direct neighbours only' : 'Neighbours of neighbours too', onclick: () => { S.hops = n; buildFocus(F.center); } }, n === 1 ? '1 step' : '2 steps')));
+  [1, 2].forEach((n) => seg.appendChild(h('button', { 'aria-pressed': String(S.hops === n), title: n === 1 ? 'Direct neighbours only' : 'Neighbours of neighbours too', onclick: () => { S.hops = n; buildFocus(F.center, F.kind); } }, n === 1 ? '1 step' : '2 steps')));
   const shown = F.nodes.length - (F.omitted ? 1 : 0);
-  fb.appendChild(h('div', { class: 'group' }, h('span', { class: 'muted', text: 'Around' }), h('span', { class: 'ttl', text: cname[F.center] }), seg));
-  fb.appendChild(h('div', { class: 'group' }, h('span', { class: 'muted', text: F.omitted ? 'Showing ' + shown + ' of ' + nf.format(F.total) : plural(shown, nouns()[0], nouns()[1]) }),
+  fb.appendChild(h('div', { class: 'group' }, h('span', { class: 'muted', text: 'Around' }), h('span', { class: 'ttl', text: F.title }), seg));
+  fb.appendChild(h('div', { class: 'group' }, h('span', { class: 'muted', text: F.omitted ? 'Showing ' + shown + ' of ' + nf.format(F.total) : F.kind === 'i' ? plural(shown, 'item', 'items') : plural(shown, nouns()[0], nouns()[1]) }),
     F.omitted ? h('button', { class: 'btn', onclick: moreFocus }, 'Show more') : null,
     h('button', { class: 'btn', onclick: () => setView('tree') }, 'Show in tree')));
 }
-function moreFocus() { S.cap = Math.min(400, S.cap + 40); buildFocus(F.center); }
+function moreFocus() { S.cap = Math.min(400, S.cap + 40); buildFocus(F.center, F.kind); }
 
 /* ---------- popovers ---------- */
 
@@ -694,6 +773,7 @@ function optMenu(p) {
   p.appendChild(h('h4', { text: 'Links drawn for the selected ' + N[0] }));
   p.appendChild(chk('Properties (domain to range)', S.f.relProps, (v) => { S.f.relProps = v; arcKey = ''; draw(); }));
   p.appendChild(chk('Restrictions', S.f.relRestr, (v) => { S.f.relRestr = v; arcKey = ''; draw(); }));
+  if (M.stats.assertions) p.appendChild(chk('Statements between individuals', S.f.relObs, (v) => { S.f.relObs = v; arcKey = ''; if (S.view === 'focus' && F) buildFocus(F.center, F.kind); else draw(); }, M.stats.assertions));
   p.appendChild(chk('Additional parents', S.f.secondary, (v) => { S.f.secondary = v; arcKey = ''; draw(); }));
 }
 function expMenu(p) {
@@ -739,11 +819,13 @@ function helpDialog() {
   sw('<path d="M9 9h13M44 3.5H25a3 3 0 0 0-3 3v5a3 3 0 0 0 3 3h19" stroke="' + mix(TH.branch[0], TH.bg, 0.3) + '"/><circle cx="6" cy="9" r="3" fill="' + TH.bg + '" stroke="' + TH.branch[0] + '"/><circle cx="48" cy="3.5" r="2.6" fill="' + TH.branch[0] + '"/><circle cx="48" cy="14.5" r="2.6" fill="' + TH.branch[0] + '"/>', 'Hierarchy: a subclass sits to the right of its parent. Colour marks the top-level branch.');
   sw('<path d="M2 14C24 14 38 4 58 4" stroke="' + TH.rel + '"/><path d="M62 4l-7-3.5v7z" fill="' + TH.rel + '"/>', 'Property: from its domain to its range.');
   sw('<path d="M2 14C24 14 38 4 58 4" stroke="' + TH.restr + '"/><path d="M62 4l-7-3.5v7z" fill="' + TH.restr + '"/>', 'Restriction, such as "plays some Violin".');
+  sw('<path d="M2 14C24 14 38 4 58 4" stroke="' + TH.ink + '"/><path d="M62 4l-7-3.5v7z" fill="' + TH.ink + '"/>', 'Statements between individuals, counted per pair of classes. A number in brackets is that count.');
   sw('<path d="M2 14C24 14 38 4 58 4" stroke="' + TH.rel + '" stroke-dasharray="6 4"/>', 'Dashed: the other end is inside a collapsed branch.');
   sw('<path d="M2 14C24 14 38 4 58 4" stroke="' + TH.ink2 + '" stroke-dasharray="1.5 4"/>', 'Dotted: an additional parent. The tree shows each class once.');
   openModal('How to read and move around', [
     h('p', { text: 'The tree only shows the hierarchy. Links between classes appear when you select or point at a class, so the picture stays readable however large the ontology is.' }),
     h('h3', { text: 'Lines' }), lg,
+    h('p', { text: 'Individuals are listed under their class and found by the search. Selecting one shows what the file states about it, and the focus view draws it with the individuals it is linked to.' }),
     h('h3', { text: 'Mouse and trackpad' }),
     h('p', { text: 'Drag to move. Scroll to pan, and pinch or hold Ctrl (⌘ on a Mac) while scrolling to zoom. Click a name to select it, click its dot to open or close the branch, and Alt-click the dot to open everything below. The numbers along the top edge collapse the tree to that level.' }),
     h('h3', { text: 'Keyboard' }), dl,
@@ -928,7 +1010,12 @@ function scheduleTip(sx, sy) {
     if (hv.level) { t.appendChild(h('b', { text: 'Level ' + hv.level })); t.appendChild(h('span', { text: 'Click to show the tree down to this level' })); }
     else {
       const n = hv.n, f = hv.f;
-      if (f && f.stub) { t.appendChild(h('b', { text: f.t })); t.appendChild(h('span', { text: 'Click to show more neighbours' })); }
+      if (f && f.k === 'i') {
+        const ind = M.inds[f.i];
+        t.appendChild(h('b', { text: indName(ind) }));
+        t.appendChild(h('span', { text: ind.types.length ? 'Individual of ' + ind.types.slice(0, 4).map((x) => cname[x]).join(', ') : 'Individual without a class' }));
+        t.appendChild(h('span', { text: plural(ind.out.length / 2 + indIn[f.i].length / 2, 'statement', 'statements') + (ind.dv.length ? ', ' + plural(ind.dv.length / 4, 'data value', 'data values') : '') }));
+      } else if (f && f.stub) { t.appendChild(h('b', { text: f.t })); t.appendChild(h('span', { text: 'Click to show more neighbours' })); }
       else {
         const i = n ? n.i : f.i;
         if (i === -3) { t.appendChild(h('b', { text: plural(extGroup.kids.length, nouns()[0], nouns()[1]) + ' declared elsewhere' })); t.appendChild(h('span', { text: 'This file mentions them, for example in restrictions, but does not declare them. They usually come from an imported ontology.' })); }
@@ -1036,7 +1123,8 @@ function click(sx, sy, ev) {
     const o = hitFocus(sx, sy);
     if (!o) return;
     if (o.stub) { moreFocus(); return; }
-    if (o.i !== F.center) selectClass(o.i, {});
+    if (o.k === 'i') { if (!(F.kind === 'i' && o.i === F.center)) selectInd(o.i); }
+    else if (!(F.kind === 'c' && o.i === F.center)) selectClass(o.i, {});
   }
 }
 cv.addEventListener('dblclick', (ev) => {
