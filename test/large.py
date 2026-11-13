@@ -19,7 +19,7 @@ async def main():
         errors = []
         page.on('pageerror', lambda e: errors.append(str(e)))
         await page.goto(URL); await page.wait_for_timeout(400)
-        print('%-22s %8s %8s %9s %9s %10s' % ('file', 'classes', 'load s', 'overlaps', 'all open', 'frame ms'))
+        print('%-22s %8s %8s %9s %9s %10s %14s %10s' % ('file', 'classes', 'load s', 'overlaps', 'all open', 'frame ms', 'circle overlaps', 'frame ms'))
         bad = 0
         for f in FILES:
             path = DATA / f
@@ -37,8 +37,13 @@ async def main():
             n = (await page.evaluate('canopyDebug.info()'))['visible']; o2 = await page.evaluate('canopyDebug.overlaps()')
             await page.keyboard.press('f'); await page.wait_for_timeout(600)
             ms = max(await page.evaluate('canopyDebug.frame()'), await page.evaluate('canopyDebug.frame()'))
-            bad += (o1 + o2 > 0)
-            print('%-22s %8d %8.2f %9d %9d %10.1f' % (f, info['classes'], load, o1 + o2, n, ms))
+            # the same tree, all levels open, in the circle view
+            await page.click('#viewSeg button[data-v=radial]'); await page.wait_for_timeout(700)
+            o3 = await page.evaluate('canopyDebug.overlapsRadial()')
+            ms2 = max(await page.evaluate('canopyDebug.frame()'), await page.evaluate('canopyDebug.frame()'))
+            await page.click('#viewSeg button[data-v=tree]'); await page.wait_for_timeout(200)
+            bad += (o1 + o2 + o3 > 0)
+            print('%-22s %8d %8.2f %9d %9d %10.1f %14d %10.1f' % (f, info['classes'], load, o1 + o2, n, ms, o3, ms2))
         print('page errors:', errors if errors else 'none')
         await b.close()
         raise SystemExit(1 if bad or errors else 0)

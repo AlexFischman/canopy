@@ -109,6 +109,7 @@ kbd {
 .group { display: inline-flex; align-items: center; background: var(--surface); border: 1px solid var(--line); border-radius: 10px; padding: 2px; box-shadow: var(--shadow-s); pointer-events: auto; }
 .group .btn { height: 28px; border-radius: 7px; padding: 0 8px; }
 .group .btn.icon { width: 28px; padding: 0; }
+.group .btn[aria-pressed="true"] { background: var(--ink); color: var(--bg); }
 .group .val { padding: 0 6px; min-width: 46px; text-align: center; color: var(--ink2); font-variant-numeric: tabular-nums; }
 .group .lbl { padding: 0 4px 0 8px; color: var(--ink2); }
 #mini { position: absolute; right: 12px; bottom: 12px; border-radius: 10px; border: 1px solid var(--line); background: var(--surface); box-shadow: var(--shadow-s); cursor: pointer; touch-action: none; }
@@ -266,7 +267,8 @@ details ul.list { margin: 2px 0 4px 14px; }
     <div class="spacer"></div>
     <div class="seg" id="viewSeg" role="group" aria-label="View">
       <button data-v="tree" aria-pressed="true" title="The whole hierarchy as a collapsible tree (G)">Tree</button>
-      <button data-v="focus" aria-pressed="false" title="The neighbourhood of the selected class (G)">Focus</button>
+      <button data-v="radial" aria-pressed="false" title="The same hierarchy on a circle, with links bundled through the middle (G)">Circle</button>
+      <button data-v="focus" aria-pressed="false" title="The neighbourhood of the selected class or individual (G)">Focus</button>
     </div>
     <button class="btn" id="optBtn" aria-haspopup="true" aria-expanded="false"><span class="lbl">View options</span></button>
     <button class="btn" id="expBtn" aria-haspopup="true" aria-expanded="false"><span class="lbl">Export</span></button>
@@ -1896,7 +1898,7 @@ function mix(a, b, t) {
 const S = {
   view: 'tree', theme: 'light', sel: null, hover: null, labelMode: 'label', lang: '', sort: 'az',
   f: { dep: false, ext: true, relProps: true, relRestr: true, relObs: true, secondary: true, mini: true },
-  tab: 'details', hops: 1, cap: 40, query: ''
+  tab: 'details', hops: 1, cap: 40, query: '', allLinks: null
 };
 let M = null, fileLabel = '', isSample = false, loadInfo = null;
 let cname = [], pname = [];
@@ -1959,7 +1961,8 @@ function nouns() { return M && M.mode === 'skos' ? ['concept', 'concepts'] : ['c
 
 function mkNode(i) {
   return { i: i, name: '', t: '', w: -1, parent: null, kids: [], depth: 0, desc: 0, open: false, branch: -1,
-    x: 0, y: 0, nx: 0, ny: 0, ox: 0, oy: 0, a: 1, top: 0, bot: 0, g: -1, was: false, mc: 0, dep: false, ext: false, k0: 0, k1: 0, to: null };
+    x: 0, y: 0, nx: 0, ny: 0, ox: 0, oy: 0, a: 1, top: 0, bot: 0, g: -1, was: false, mc: 0, dep: false, ext: false, k0: 0, k1: 0, to: null,
+    rx: 0, ry: 0, th: 0, rr: 0, tth: 0, trr: 0, oth: 0, orr: 0 };
 }
 
 function buildTree(keepOpen) {
@@ -2111,27 +2114,40 @@ function layout() {
   const old = vis;
   vis = out; cols = cl; colW = cw;
   bounds = { w: colX[cw.length - 1] + PADL + cw[cw.length - 1] + 16, h: Math.max(ROW, y - GROUPGAP) };
+  radialTargets();
   return old;
 }
 
 /* Recompute the layout. opts: {animate, anchor: node kept still on screen, center: node, cam: explicit target} */
 function relayout(opts) {
   opts = opts || {};
-  const c0 = { x: cam.x, y: cam.y, k: cam.k };
-  const ax = opts.anchor ? opts.anchor.x : 0, ay = opts.anchor ? opts.anchor.y : 0;
+  const radial = S.view === 'radial', C = radial ? rcam : cam;
+  const c0 = { x: C.x, y: C.y, k: C.k };
+  const an = opts.anchor || null, atFit = radial && radReady && radialAtFit();
+  const ax = an ? an.x : 0, ay = an ? an.y : 0, p0x = an ? an.rr * Math.cos(an.th) : 0, p0y = an ? an.rr * Math.sin(an.th) : 0;
   const old = layout();
   let c1 = null;
   if (opts.cam) c1 = opts.cam;
-  else if (opts.center) c1 = centerCam(opts.center);
-  else if (opts.anchor && opts.anchor.g === gen) c1 = { x: cam.x + (ax - opts.anchor.nx) * cam.k, y: cam.y + (ay - opts.anchor.ny) * cam.k, k: cam.k };
-  if (opts.reveal && (opts.forceCenter || offscreenAt(opts.reveal, c1 || cam))) c1 = centerCam(opts.reveal);
+  else if (opts.center) c1 = centerCamV(opts.center);
+  else if (an && an.g === gen) {
+    if (radial) c1 = { x: C.x + (p0x - an.trr * Math.cos(an.tth)) * C.k, y: C.y + (p0y - an.trr * Math.sin(an.tth)) * C.k, k: C.k };
+    else c1 = { x: C.x + (ax - an.nx) * C.k, y: C.y + (ay - an.ny) * C.k, k: C.k };
+  }
+  if (radial && (opts.fit || atFit) && !opts.cam) c1 = fitRadial();
+  else if (opts.reveal && (opts.forceCenter || offscreenV(opts.reveal, c1 || C))) c1 = centerCamV(opts.reveal);
   const doAnim = opts.animate && !REDUCED && vis.length + old.length < 9000;
   ghosts = [];
   if (doAnim) {
     for (let j = 0; j < vis.length; j++) {
       const n = vis[j];
-      if (n.was) { n.ox = n.x; n.oy = n.y; n.a = 1; }
-      else { const p = n.parent; n.ox = p ? p.ox : n.nx; n.oy = p ? p.oy : n.ny; n.x = n.ox; n.y = n.oy; n.a = 0; }
+      if (n.was) { n.ox = n.x; n.oy = n.y; n.orr = n.rr; n.oth = n.th; n.a = 1; }
+      else {
+        const p = n.parent;
+        n.ox = p ? p.ox : n.nx; n.oy = p ? p.oy : n.ny; n.orr = p ? p.orr : n.trr; n.oth = p ? p.oth : n.tth;
+        n.x = n.ox; n.y = n.oy; n.rr = n.orr; n.th = n.oth; n.a = 0;
+      }
+      /* turn the short way round */
+      if (n.tth - n.oth > Math.PI) n.oth += TAU; else if (n.oth - n.tth > Math.PI) n.oth -= TAU;
     }
     for (let j = 0; j < old.length; j++) {
       const n = old[j];
@@ -2139,15 +2155,16 @@ function relayout(opts) {
       let a = n.parent;
       while (a && a.g !== gen) a = a.parent;
       if (!a) continue;
-      n.ox = n.x; n.oy = n.y; n.to = a; ghosts.push(n);
+      n.ox = n.x; n.oy = n.y; n.orr = n.rr; n.oth = n.th; n.to = a; ghosts.push(n);
+      if (a.tth - n.oth > Math.PI) n.oth += TAU; else if (n.oth - a.tth > Math.PI) n.oth -= TAU;
     }
-    anim = { t0: performance.now(), dur: 280, nodes: true, c0: c0, c1: c1 };
+    anim = { t0: performance.now(), dur: 280, nodes: true, cam: C, c0: c0, c1: c1 };
   } else {
-    for (let j = 0; j < vis.length; j++) { const n = vis[j]; n.x = n.nx; n.y = n.ny; n.a = 1; }
+    for (let j = 0; j < vis.length; j++) { const n = vis[j]; n.x = n.nx; n.y = n.ny; n.rr = n.trr; n.th = n.tth; n.a = 1; }
     anim = null;
-    if (c1) { cam.x = c1.x; cam.y = c1.y; cam.k = c1.k; }
+    if (c1) { C.x = c1.x; C.y = c1.y; C.k = c1.k; }
   }
-  miniDirty = true; arcKey = '';
+  miniDirty = true; arcKey = ''; allKey = '';
   updateDepthLabel();
   draw();
 }
@@ -2157,9 +2174,21 @@ function centerCam(n, k) {
   return { x: W * 0.4 - (n.nx + n.w / 2) * k, y: H / 2 - n.ny * k, k: k };
 }
 function moveCam(c1, dur) {
-  if (REDUCED || dur === 0) { cam.x = c1.x; cam.y = c1.y; cam.k = c1.k; anim = null; draw(); return; }
-  anim = { t0: performance.now(), dur: dur || 320, nodes: false, c0: { x: cam.x, y: cam.y, k: cam.k }, c1: c1 };
+  const C = S.view === 'radial' ? rcam : cam;
+  if (REDUCED || dur === 0) { C.x = c1.x; C.y = c1.y; C.k = c1.k; anim = null; draw(); return; }
+  anim = { t0: performance.now(), dur: dur || 320, nodes: false, cam: C, c0: { x: C.x, y: C.y, k: C.k }, c1: c1 };
   draw();
+}
+/* camera helpers that follow the current view */
+function centerCamV(n) {
+  if (S.view !== 'radial') return centerCam(n);
+  const k = Math.max(rcam.k, 0.7);
+  return { x: W * 0.46 - n.trr * Math.cos(n.tth) * k, y: H / 2 - n.trr * Math.sin(n.tth) * k, k: k };
+}
+function offscreenV(n, c) {
+  if (S.view !== 'radial') return offscreenAt(n, c);
+  const sx = n.trr * Math.cos(n.tth) * c.k + c.x, sy = n.trr * Math.sin(n.tth) * c.k + c.y;
+  return sx < 60 || sx > W - 60 || sy < 60 || sy > H - 80 || c.k < 0.45;
 }
 function fitCam(readable) {
   const padX = 36, padT = 44, padB = 60;
@@ -2192,7 +2221,7 @@ function toggle(n, deep) {
 function setLevel(L) {
   L = Math.max(1, Math.min(maxDepth, L));
   setLevelState(L);
-  relayout({ animate: true, anchor: root });
+  relayout({ animate: true, anchor: root, fit: true });
 }
 function visibleDepth() { return cols.length - 1; }
 function stepLevel(dir) {
@@ -2208,7 +2237,7 @@ function stepLevel(dir) {
     const cl = cols[d - 1];
     for (let j = 0; j < cl.length; j++) cl[j].open = false;
   }
-  relayout({ animate: true, anchor: root });
+  relayout({ animate: true, anchor: root, fit: true });
 }
 function offscreenAt(n, c) {
   const sx = n.nx * c.k + c.x, sy = n.ny * c.k + c.y;
@@ -2220,7 +2249,7 @@ function reveal(n, center) {
   let changed = false;
   for (let a = n.parent; a; a = a.parent) if (!a.open) { a.open = true; changed = true; }
   if (changed) relayout({ animate: true, anchor: anchor, reveal: n, forceCenter: center });
-  else if (center || offscreenAt(n, cam)) moveCam(centerCam(n));
+  else if (S.view === 'radial' ? (!radialAtFit() && (center || offscreenV(n, rcam))) : (center || offscreenV(n, cam))) moveCam(centerCamV(n));
   else draw();
 }
 
@@ -2237,14 +2266,14 @@ function frame() {
     let t = (performance.now() - anim.t0) / anim.dur;
     if (t >= 1) t = 1;
     const e = 1 - Math.pow(1 - t, 3);
-    if (anim.c1) { cam.x = anim.c0.x + (anim.c1.x - anim.c0.x) * e; cam.y = anim.c0.y + (anim.c1.y - anim.c0.y) * e; cam.k = anim.c0.k + (anim.c1.k - anim.c0.k) * e; }
+    if (anim.c1) { const C = anim.cam || cam; C.x = anim.c0.x + (anim.c1.x - anim.c0.x) * e; C.y = anim.c0.y + (anim.c1.y - anim.c0.y) * e; C.k = anim.c0.k + (anim.c1.k - anim.c0.k) * e; }
     if (anim.nodes) {
-      for (let j = 0; j < vis.length; j++) { const n = vis[j]; n.x = n.ox + (n.nx - n.ox) * e; n.y = n.oy + (n.ny - n.oy) * e; if (!n.was) n.a = e; }
-      for (let j = 0; j < ghosts.length; j++) { const n = ghosts[j]; n.x = n.ox + (n.to.nx - n.ox) * e; n.y = n.oy + (n.to.ny - n.oy) * e; n.a = 1 - e; }
+      for (let j = 0; j < vis.length; j++) { const n = vis[j]; n.x = n.ox + (n.nx - n.ox) * e; n.y = n.oy + (n.ny - n.oy) * e; n.rr = n.orr + (n.trr - n.orr) * e; n.th = n.oth + (n.tth - n.oth) * e; if (!n.was) n.a = e; }
+      for (let j = 0; j < ghosts.length; j++) { const n = ghosts[j]; n.x = n.ox + (n.to.nx - n.ox) * e; n.y = n.oy + (n.to.ny - n.oy) * e; n.rr = n.orr + (n.to.trr - n.orr) * e; n.th = n.oth + (n.to.tth - n.oth) * e; n.a = 1 - e; }
     }
     if (anim.focus) focusTween(e);
     if (t >= 1) {
-      if (anim.nodes) { for (let j = 0; j < vis.length; j++) { vis[j].a = 1; vis[j].was = true; } ghosts = []; }
+      if (anim.nodes) { for (let j = 0; j < vis.length; j++) { const n = vis[j]; n.a = 1; n.was = true; n.rr = n.trr; n.th = n.tth; } ghosts = []; }
       anim = null;
     } else draw();
   }
@@ -2252,7 +2281,8 @@ function frame() {
   if (S.view === 'tree') {
     renderTree(g, W, H, cam, false);
     drawMini();
-  } else renderFocus(g, W, H, fcam, false);
+  } else if (S.view === 'radial') renderRadial(g, W, H, rcam, false);
+  else renderFocus(g, W, H, fcam, false);
   updateZoomLabel();
 }
 
@@ -2622,7 +2652,8 @@ function drawArcChips(c, k, smallLabels) {
   if (!chips.length) return;
   const placed = [], fs = 11 / k, many = chips.length > 14;
   const names = [];
-  if (!smallLabels && dn.length < 5000) for (let j = 0; j < dn.length; j++) { const n = dn[j]; names.push(n.x - 7, n.y - 9, arcRight(n), n.y + 9); }
+  if (smallLabels) for (let j = 0; j < chipObst.length; j++) names.push(chipObst[j]);
+  else if (dn.length < 5000) for (let j = 0; j < dn.length; j++) { const n = dn[j]; names.push(n.x - 7, n.y - 9, arcRight(n), n.y + 9); }
   const free = (x, y, w, h) => {
     for (let q = 0; q < placed.length; q++) { const p = placed[q]; if (x < p[2] && x + w > p[0] && y < p[3] && y + h > p[1]) return 0; }
     for (let q = 0; q < names.length; q += 4) if (x < names[q + 2] && x + w > names[q] && y < names[q + 3] && y + h > names[q + 1]) return 1;
@@ -2697,6 +2728,305 @@ function miniTo(ev) {
   const wx = (ev.clientX - r.left - 6) / sx, wy = (ev.clientY - r.top - 6) / sy;
   cam.x = W / 2 - wx * cam.k; cam.y = H / 2 - wy * cam.k;
   anim = null; draw();
+}
+
+/* ---------- circle view ---------- */
+
+/* The same tree on a circle. Every end node (a leaf or a closed branch) sits on the rim with its name pointing
+   outwards; open branches sit on inner rings, one ring per level. The angle of a node is its row in the tree
+   view, so order, open and closed branches, selection and links are shared between the two views. Links run
+   through the inside and follow the hierarchy, which bundles those that go the same way. */
+const TAU = Math.PI * 2, RIMPX = 16, RINGMIN = 46, RMIN = 150;
+const rcam = { x: 0, y: 0, k: 1 };
+let radT = { R: RMIN, label: 0, span: 1 }, radReady = false, allKey = '', allList = [], innerHits = [], chipObst = [];
+
+function isInner(n) { return n.open && n.kids.length > 0; }
+function radialTargets() {
+  const span = bounds.h + ROW * 2;
+  let D = 0, lab = 0;
+  for (let j = 0; j < vis.length; j++) { const n = vis[j]; if (n !== root && isInner(n) && n.depth > D) D = n.depth; }
+  for (let j = 0; j < vis.length; j++) { const n = vis[j]; if (!isInner(n)) { const e = PADL + n.w + chipW(n); if (e > lab) lab = e; } }
+  /* as large as the names on the rim and the rings need, and no smaller than what fills the window */
+  const room = Math.min(340, Math.min(W - 40, H - 84) / 2 - lab - 22);
+  const R = Math.max(RMIN, room, span / ROW * RIMPX / TAU, (D + 1) * RINGMIN);
+  for (let j = 0; j < vis.length; j++) vis[j].tth = (vis[j].ny + ROW) / span * TAU - Math.PI / 2;
+  /* from the rim inwards: an open branch sits behind its children, further back the wider they fan out,
+     and never closer to the centre than the ring of its level */
+  for (let j = vis.length - 1; j >= 0; j--) {
+    const n = vis[j];
+    if (n === root) n.trr = 0;
+    else if (!isInner(n)) n.trr = R;
+    else {
+      const kids = n.kids;
+      let m = R;
+      for (let i = 0; i < kids.length; i++) if (kids[i].trr < m) m = kids[i].trr;
+      const arc = (kids[kids.length - 1].tth - kids[0].tth) * m;
+      n.trr = Math.max(R * Math.pow(n.depth / (D + 1), 0.8), m - Math.max(RINGMIN + 14, Math.min(arc * 0.45, m * 0.5)));
+    }
+  }
+  radT = { R: R, label: lab, span: span };
+}
+function fitRadial() {
+  const D = 2 * (radT.R + radT.label + 22), k = Math.max(MINK, Math.min(1, (W - 40) / D, (H - 84) / D));
+  return { x: W / 2, y: H / 2 + 8, k: k };
+}
+/* true while the whole circle is in view the way Fit leaves it; it then stays that way when branches open or close */
+function radialAtFit() {
+  const f = fitRadial();
+  return Math.abs(rcam.k - f.k) <= f.k * 0.03 && Math.abs(rcam.x - f.x) < 40 && Math.abs(rcam.y - f.y) < 40;
+}
+function placeRadial(list) {
+  for (let j = 0; j < list.length; j++) { const n = list[j]; n.rx = n.rr * Math.cos(n.th); n.ry = n.rr * Math.sin(n.th); }
+}
+function allLinksOn() { return S.allLinks === null ? M.rels.length + M.obs.length <= 400 : S.allLinks; }
+function buildAllArcs() {
+  const key = gen + '|' + S.f.relProps + S.f.relRestr + S.f.relObs;
+  if (key === allKey) return;
+  allKey = key;
+  const map = new Map();
+  collectArcs(M.rels, true, map); collectObs(M.obs, true, map);
+  allList = Array.from(map.values());
+  if (allList.length > 4000) allList.length = 4000;
+}
+/* The tree path from one node up to the common ancestor and down to the other. Links follow it, which bundles them. */
+function treePath(a, b) {
+  const up = [], at = new Map();
+  for (let n = a; n; n = n.parent) { at.set(n, up.length); up.push(n); }
+  const down = [];
+  let n = b;
+  while (n && !at.has(n)) { down.push(n); n = n.parent; }
+  const li = at.get(n), path = up.slice(0, li + 1);
+  for (let j = down.length - 1; j >= 0; j--) path.push(down[j]);
+  /* the top of the path is left out, so that links pass by the centre and not all through it */
+  if (path.length > 3 || (path.length === 3 && li === 1 && path[1] === root)) path.splice(li, 1);
+  return path;
+}
+function radialArc(c, k, a, quiet) {
+  const T = TH, A = a.a, B = a.b, col = a.cls === 'rel' ? T.rel : a.cls === 'restr' ? T.restr : a.cls === 'obs' ? T.ink : T.ink2;
+  c.strokeStyle = col; c.fillStyle = col;
+  c.setLineDash(a.cls === 'sec' ? [2 / k, 4 / k] : a.hidden && !quiet ? [6 / k, 4 / k] : []);
+  if (A === B) {
+    const r = 7 / k, d = A.rr - 9 - r, x = d * Math.cos(A.th), y = d * Math.sin(A.th);
+    c.beginPath(); c.arc(x, y, r, 0, TAU); c.stroke(); c.setLineDash([]);
+    if (!quiet) arcChips.push([[[x - 2 * r * Math.cos(A.th), y - 2 * r * Math.sin(A.th)]], 0, a, col, false]);
+    return;
+  }
+  const path = treePath(A, B), pts = [];
+  for (let j = 0; j < path.length; j++) pts.push([path[j].rx, path[j].ry]);
+  /* two ends only: a chord, bent towards the centre */
+  if (pts.length === 2) pts.splice(1, 0, [(pts[0][0] + pts[1][0]) * 0.22, (pts[0][1] + pts[1][1]) * 0.22]);
+  const n = pts.length;
+  const sa = (A.rr - 8) / (A.rr || 1), sb = (B.rr - 8) / (B.rr || 1);
+  pts[0] = [A.rx * sa, A.ry * sa]; pts[n - 1] = [B.rx * sb, B.ry * sb];
+  const bx = pts[n - 1][0] - pts[0][0], by = pts[n - 1][1] - pts[0][1], beta = 0.86;
+  for (let j = 1; j < n - 1; j++) { const t = j / (n - 1); pts[j] = [beta * pts[j][0] + (1 - beta) * (pts[0][0] + t * bx), beta * pts[j][1] + (1 - beta) * (pts[0][1] + t * by)]; }
+  let ex = pts[n - 1][0], ey = pts[n - 1][1];
+  const hd = quiet ? 0 : 7 / k, dx = ex - pts[n - 2][0], dy = ey - pts[n - 2][1], dl = Math.sqrt(dx * dx + dy * dy) || 1, ux = dx / dl, uy = dy / dl;
+  const tipx = ex, tipy = ey;
+  ex -= ux * hd; ey -= uy * hd;
+  const mids = [];
+  c.beginPath(); c.moveTo(pts[0][0], pts[0][1]);
+  let px = pts[0][0], py = pts[0][1];
+  if (n === 2) { c.lineTo(ex, ey); mids.push([(px + ex) / 2, (py + ey) / 2]); }
+  else for (let j = 1; j < n - 1; j++) {
+    const last = j === n - 2, qx = last ? ex : (pts[j][0] + pts[j + 1][0]) / 2, qy = last ? ey : (pts[j][1] + pts[j + 1][1]) / 2;
+    c.quadraticCurveTo(pts[j][0], pts[j][1], qx, qy);
+    mids.push([(px + 2 * pts[j][0] + qx) / 4, (py + 2 * pts[j][1] + qy) / 4]);
+    px = qx; py = qy;
+  }
+  c.stroke(); c.setLineDash([]);
+  if (quiet) return;
+  c.beginPath(); c.moveTo(tipx, tipy); c.lineTo(ex - uy * 4 / k, ey + ux * 4 / k); c.lineTo(ex + uy * 4 / k, ey - ux * 4 / k); c.closePath();
+  if (a.cls === 'sec') { c.fillStyle = T.bg; c.fill(); c.stroke(); } else c.fill();
+  if (a.cls !== 'sec') { mids.reverse(); arcChips.push([mids, 0, a, col, false]); }
+}
+function radialLink(P, p, kid) {
+  const ck = Math.cos(kid.th), sk = Math.sin(kid.th), r1 = kid.rr - 6;
+  if (p === root) { P.moveTo(8 * ck, 8 * sk); P.lineTo(r1 * ck, r1 * sk); return; }
+  const cp = Math.cos(p.th), sp = Math.sin(p.th), r0 = p.rr + 5, rm = (r0 + r1) / 2, dth = kid.th - p.th, ad = Math.abs(dth);
+  P.moveTo(r0 * cp, r0 * sp);
+  if (ad < 0.4) { P.bezierCurveTo(rm * cp, rm * sp, rm * ck, rm * sk, r1 * ck, r1 * sk); return; }
+  /* a wide turn: follow the circle, leaving and arriving along the radius */
+  const m = Math.min(28, 3 + Math.ceil(ad * 7)), dt = 1 / m, dr = r1 - r0;
+  let x0 = r0 * cp, y0 = r0 * sp, vx0 = dr * cp, vy0 = dr * sp;
+  for (let i = 1; i <= m; i++) {
+    const t = i * dt, a = p.th + dth * t * t * (3 - 2 * t), r = r0 + dr * t, w = r * dth * 6 * t * (1 - t), ca = Math.cos(a), sa = Math.sin(a);
+    const x1 = r * ca, y1 = r * sa, vx1 = dr * ca - w * sa, vy1 = dr * sa + w * ca;
+    P.bezierCurveTo(x0 + vx0 * dt / 3, y0 + vy0 * dt / 3, x1 - vx1 * dt / 3, y1 - vy1 * dt / 3, x1, y1);
+    x0 = x1; y0 = y1; vx0 = vx1; vy0 = vy1;
+  }
+}
+
+function renderRadial(c, W, H, cam, ex) {
+  /* kk is the scale of the drawing; k is the zoom that sizes kept constant on screen go by (a picture is drawn at twice the size) */
+  const kk = cam.k, k = ex ? kk / 2 : kk, T = TH, animating = !!(anim && anim.nodes) && !ex;
+  c.fillStyle = T.bg; c.fillRect(0, 0, W, H);
+  if (!ex && k >= 0.6) {
+    const st = 24 * k, ox = ((cam.x % st) + st) % st, oy = ((cam.y % st) + st) % st, sz = k >= 1 ? 1.5 : 1;
+    c.fillStyle = T.grid;
+    for (let y = oy; y < H; y += st) for (let x = ox; x < W; x += st) c.fillRect(x, y, sz, sz);
+  }
+  placeRadial(vis);
+  if (animating) placeRadial(ghosts);
+  const mg = 340, vx0 = -cam.x / kk - mg, vx1 = (W - cam.x) / kk + mg, vy0 = -cam.y / kk - mg, vy1 = (H - cam.y) / kk + mg;
+  const off = (n) => n.rx < vx0 || n.rx > vx1 || n.ry < vy0 || n.ry > vy1;
+  c.save();
+  c.translate(cam.x, cam.y); c.scale(kk, kk);
+  c.lineCap = 'round'; c.lineJoin = 'round';
+
+  /* hierarchy */
+  const LP = [];
+  for (let b = 0; b <= NB; b++) LP.push(new Path2D());
+  for (let j = 0; j < vis.length; j++) {
+    const p = vis[j];
+    if (!isInner(p)) continue;
+    const kids = p.kids, po = off(p);
+    for (let i = 0; i < kids.length; i++) { const kid = kids[i]; if (po && off(kid)) continue; radialLink(LP[kid.branch + 1], p, kid); }
+  }
+  if (animating) for (let j = 0; j < ghosts.length; j++) { const n = ghosts[j], P = LP[n.branch + 1]; P.moveTo(n.to.rx, n.to.ry); P.lineTo(n.rx, n.ry); }
+  /* thinner where the rim is so crowded that neighbours would merge */
+  c.lineWidth = Math.max(0.45, Math.min(1.2, RIMPX * k * 0.8)) / k;
+  for (let b = 0; b <= NB; b++) { c.strokeStyle = mix(branchColor(b - 1), T.bg, b === 0 ? 0.4 : 0.5); c.stroke(LP[b]); }
+
+  const sn0 = selNode(), hn = ex ? null : hoverNode();
+  if (sn0 && isVisible(sn0)) {
+    c.lineWidth = 2.2 / k;
+    for (let n = sn0; n.parent; n = n.parent) { const P = new Path2D(); radialLink(P, n.parent, n); c.strokeStyle = branchColor(n.branch); c.stroke(P); }
+  }
+
+  /* links: all of them faintly if asked for, then those of the selection */
+  arcChips = [];
+  if (allLinksOn()) {
+    buildAllArcs();
+    c.lineWidth = 1 / k; c.globalAlpha = allList.length > 600 ? 0.18 : allList.length > 150 ? 0.26 : allList.length > 45 ? 0.36 : 0.5;
+    for (let j = 0; j < allList.length; j++) radialArc(c, k, allList[j], true);
+    c.globalAlpha = 1;
+  }
+  buildArcs();
+  for (let j = 0; j < arcList.length; j++) {
+    const a = arcList[j];
+    if (ex && a.faint) continue;
+    c.globalAlpha = a.faint ? 0.6 : 1; c.lineWidth = (a.cls === 'sec' ? 1.3 : 1.9) / k;
+    radialArc(c, k, a, false);
+  }
+  c.globalAlpha = 1;
+
+  /* dots */
+  const all = animating && ghosts.length ? vis.concat(ghosts) : vis;
+  const FP = [], RP = [];
+  for (let b = 0; b <= NB; b++) { FP.push(new Path2D()); RP.push(new Path2D()); }
+  for (let j = 0; j < all.length; j++) {
+    const n = all[j];
+    if (off(n)) continue;
+    const r = !n.kids.length ? 2.6 : n.open ? 3.6 : 4.6, P = (isInner(n) ? RP : FP)[n.branch + 1];
+    P.moveTo(n.rx + r, n.ry); P.arc(n.rx, n.ry, r, 0, TAU);
+  }
+  c.lineWidth = 1.7 / Math.max(k, 0.5);
+  for (let b = 0; b <= NB; b++) {
+    const col = branchColor(b - 1);
+    c.fillStyle = col; c.fill(FP[b]);
+    c.fillStyle = T.bg; c.fill(RP[b]); c.strokeStyle = col; c.stroke(RP[b]);
+  }
+
+  /* names on the rim, written outwards */
+  const rim = 13 * k >= 6.2, selTypes = S.sel && S.sel.t === 'i' ? M.inds[S.sel.i].types : null;
+  c.textBaseline = 'middle';
+  if (rim) {
+    c.font = LABEL_FONT;
+    for (let j = 0; j < all.length; j++) {
+      const n = all[j];
+      if (isInner(n) || n === root || off(n)) continue;
+      const isSel = n === sn0, isM = matches !== null && n.i >= 0 && matches.has(n.i), right = Math.cos(n.th) >= 0, tx = right ? PADL : -PADL - n.w;
+      c.save();
+      c.translate(n.rx, n.ry); c.rotate(right ? n.th : n.th + Math.PI);
+      if (n.a < 1) c.globalAlpha = n.a;
+      if (isSel) { c.fillStyle = T.ink; rr(c, tx - 5, -9.5, n.w + 10, 19, 5); c.fill(); }
+      else if (isM) { c.fillStyle = T.match; rr(c, tx - 4, -9, n.w + 8, 18, 4); c.fill(); }
+      else if (selTypes !== null && selTypes.indexOf(n.i) >= 0) { c.fillStyle = T.surface; rr(c, tx - 5, -9.5, n.w + 10, 19, 5); c.fill(); c.strokeStyle = T.ink; c.lineWidth = 1.5 / k; c.stroke(); }
+      else if (n === hn) { c.fillStyle = T.surface; rr(c, tx - 5, -9.5, n.w + 10, 19, 5); c.fill(); c.strokeStyle = T.line2; c.lineWidth = 1 / k; c.stroke(); }
+      c.textAlign = 'left';
+      c.fillStyle = isSel ? T.bg : n.dep ? T.ink3 : n.ext ? T.ink2 : T.ink;
+      c.fillText(n.t, tx, 0.5);
+      if (n.dep) { c.strokeStyle = isSel ? T.bg : T.ink3; c.lineWidth = 1; c.beginPath(); c.moveTo(tx, 0.5); c.lineTo(tx + n.w, 0.5); c.stroke(); }
+      if (n.kids.length) {
+        const hit = matches !== null && n.mc > 0;
+        c.font = (hit ? '700 ' : '') + CHIP_FONT; c.fillStyle = hit ? T.restr : T.ink3;
+        if (right) c.fillText('+' + n.desc, tx + n.w + 8, 0.5); else { c.textAlign = 'right'; c.fillText('+' + n.desc, tx - 8, 0.5); }
+      }
+      c.restore();
+    }
+  }
+
+  /* names inside the circle: upright, at a constant size on screen, and only where they do not collide */
+  const fs = 11 / k, cand = [];
+  c.font = '600 ' + fs + 'px ' + FONT;
+  for (let j = 0; j < vis.length; j++) {
+    const n = vis[j];
+    if (off(n)) continue;
+    if (isInner(n) || n === root) cand.push(n);
+    else if (!rim && (n.kids.length || n === sn0 || n === hn || (matches !== null && n.i >= 0 && matches.has(n.i)))) cand.push(n);
+  }
+  const rank = (n) => (n === sn0 ? 0 : n === hn ? 1 : selTypes !== null && selTypes.indexOf(n.i) >= 0 ? 2 : isInner(n) || n === root ? 3 : 4);
+  cand.sort((a, b) => rank(a) - rank(b) || a.depth - b.depth || b.desc - a.desc);
+  const placed = [];
+  innerHits = []; chipObst = [];
+  c.lineWidth = 3.5 / k; c.strokeStyle = T.bg; c.textAlign = 'left';
+  for (let j = 0; j < cand.length && placed.length < 500; j++) {
+    const n = cand[j], tw = n.w * (11 / 13) * 1.07 / k, inner = isInner(n) || n === root, force = n === sn0 || n === hn;
+    let x0, yc;
+    if (inner) { x0 = n.rx - tw / 2; yc = n.ry + (n === root || Math.sin(n.th) < 0 ? -12 : 12) / k; }
+    else { x0 = Math.cos(n.th) >= 0 ? n.rx + 8 / k : n.rx - 8 / k - tw; yc = n.ry; }
+    const y0 = yc - 7.5 / k, y1 = yc + 7.5 / k;
+    let hit = false;
+    for (let z = 0; z < placed.length; z++) { const q = placed[z]; if (x0 < q[2] && x0 + tw > q[0] && y0 < q[3] && y1 > q[1]) { hit = true; break; } }
+    if (hit && !force) continue;
+    placed.push([x0 - 5 / k, y0, x0 + tw + 5 / k, y1]);
+    chipObst.push(x0 - 5 / k, y0 - 2 / k, x0 + tw + 5 / k, y1 + 2 / k);
+    innerHits.push([x0 - 4 / k, y0, x0 + tw + 4 / k, y1, n]);
+    if (n === sn0) { c.fillStyle = T.ink; rr(c, x0 - 5 / k, y0 - 1 / k, tw + 10 / k, 17 / k, 4.5 / k); c.fill(); c.fillStyle = T.bg; }
+    else {
+      if (n === hn || (selTypes !== null && selTypes.indexOf(n.i) >= 0)) { c.fillStyle = T.surface; rr(c, x0 - 5 / k, y0 - 1 / k, tw + 10 / k, 17 / k, 4.5 / k); c.fill(); c.save(); c.strokeStyle = n === hn ? T.line2 : T.ink; c.lineWidth = 1 / k; c.stroke(); c.restore(); }
+      else c.strokeText(n.t, x0, yc);
+      c.fillStyle = matches !== null && n.i >= 0 && matches.has(n.i) ? T.restr : n.dep ? T.ink3 : T.ink;
+    }
+    c.fillText(n.t, x0, yc);
+  }
+  if (matches !== null && !rim) {
+    c.fillStyle = T.match; c.strokeStyle = T.restr; c.lineWidth = 1 / k;
+    for (let j = 0; j < vis.length; j++) {
+      const n = vis[j];
+      if ((n.i >= 0 && matches.has(n.i)) || (!n.open && n.mc > 0)) { c.beginPath(); c.arc(n.rx, n.ry, 4.5 / Math.max(k, 0.25), 0, TAU); c.fill(); c.stroke(); }
+    }
+  }
+  drawArcChips(c, k, true);
+  c.restore();
+}
+
+function hitRadial(sx, sy) {
+  const k = rcam.k, wx = (sx - rcam.x) / k, wy = (sy - rcam.y) / k, r = Math.sqrt(wx * wx + wy * wy), rim = 13 * k >= 6.2;
+  for (let j = 0; j < innerHits.length; j++) { const q = innerHits[j]; if (wx >= q[0] && wx <= q[2] && wy >= q[1] && wy <= q[3]) return { n: q[4], part: 'label' }; }
+  let best = null, bd = Math.max(8, 9 / k);
+  for (let j = 0; j < vis.length; j++) {
+    const n = vis[j];
+    if (rim && !isInner(n) && n !== root) continue;
+    const d = Math.abs(n.rx - wx) + Math.abs(n.ry - wy);
+    if (d < bd) { bd = d; best = n; }
+  }
+  if (best) return { n: best, part: 'dot' };
+  if (!rim || r < radT.R - 9) return null;
+  let th = Math.atan2(wy, wx) + Math.PI / 2;
+  if (th < 0) th += TAU;
+  const ty = th / TAU * radT.span - ROW, tx = r - radT.R;
+  bd = ROW / 2 + 0.01;
+  for (let j = 0; j < vis.length; j++) {
+    const n = vis[j];
+    if (isInner(n) || n === root) continue;
+    const dy = Math.abs(ty - n.ny);
+    if (dy >= bd || tx > PADL + n.w + chipW(n) + 6) continue;
+    bd = dy; best = n;
+  }
+  if (!best) return null;
+  return { n: best, part: tx < 7 ? 'dot' : tx > PADL + best.w + 3 ? 'chip' : 'label' };
 }
 
 /* ---------- hit testing ---------- */
@@ -3146,7 +3476,7 @@ function setModel(model, label, sample) {
     }
   });
   P.forEach((p, i) => { p.sup.forEach((s) => subProps[s].push(i)); p.dom.forEach((c) => domProps[c].push(i)); p.rng.forEach((c) => rngProps[c].push(i)); });
-  S.sel = null; S.hover = null; S.query = ''; matches = null; F = null; S.cap = 40; S.hops = 1; S.tab = 'details';
+  S.sel = null; S.hover = null; S.query = ''; matches = null; F = null; S.cap = 40; S.hops = 1; S.tab = 'details'; S.allLinks = null; radReady = false;
   S.f.dep = false; S.f.ext = true;
   $('search').value = ''; $('results').hidden = true;
   nodes = [];
@@ -3165,7 +3495,7 @@ function rebuild(keepOpen) {
   arcKey = '';
   if (S.query) runSearch(S.query, true);
   relayout({});
-  if (!keepOpen) { const c = fitCam(true); cam.x = c.x; cam.y = c.y; cam.k = c.k; }
+  if (!keepOpen) { const c = fitCam(true); cam.x = c.x; cam.y = c.y; cam.k = c.k; radReady = false; }
   $('empty').hidden = true;
   if (!M.classes.length) showEmpty();
   if (S.view === 'focus') { if (S.sel && S.sel.t === 'c') buildFocus(S.sel.i); else if (S.sel && S.sel.t === 'i') buildFocus(S.sel.i, 'i'); else F = null; }
@@ -3213,13 +3543,13 @@ function selectClass(i, opts) {
     if (!nodes[i]) return;
   }
   S.sel = { t: 'c', i: i }; S.tab = 'details'; arcKey = '';
-  if (S.view === 'tree') { if (opts.reveal === false) draw(); else reveal(nodes[i], opts.center); }
+  if (S.view !== 'focus') { if (opts.reveal === false) draw(); else reveal(nodes[i], opts.center); }
   else buildFocus(i);
   renderPanel();
 }
 function selectInd(i) {
   S.sel = { t: 'i', i: i }; S.tab = 'details'; arcKey = '';
-  if (S.view === 'tree') {
+  if (S.view !== 'focus') {
     const ts = M.inds[i].types;
     let tn = null;
     for (let j = 0; j < ts.length && !tn; j++) tn = nodes[ts[j]] || null;
@@ -3230,21 +3560,24 @@ function selectInd(i) {
 function selectProp(i) {
   S.sel = { t: 'p', i: i }; S.tab = 'details'; arcKey = '';
   renderPanel(); draw();
-  if (S.view === 'tree') { buildArcs(); if (arcNote) toast(arcNote); }
+  if (S.view !== 'focus') { buildArcs(); if (arcNote) toast(arcNote); }
 }
 function clearSel() {
   if (!S.sel) return;
   S.sel = null; arcKey = '';
   renderPanel(); draw();
 }
+let lastTreeView = 'tree';
 function setView(v, quiet) {
   S.view = v;
+  if (v !== 'focus') lastTreeView = v;
   $('viewSeg').querySelectorAll('button').forEach((b) => b.setAttribute('aria-pressed', String(b.dataset.v === v)));
   $('focusBar').hidden = v !== 'focus';
-  $('lvlGroup').hidden = v !== 'tree';
+  $('lvlGroup').hidden = v === 'focus';
+  $('allGroup').hidden = v !== 'radial';
+  if (v !== 'tree') mini.hidden = true;
   S.hover = null; hideTip();
   if (v === 'focus') {
-    mini.hidden = true;
     if (S.sel && S.sel.t === 'c' && nodes[S.sel.i]) { F = null; buildFocus(S.sel.i); }
     else if (S.sel && S.sel.t === 'i') { F = null; buildFocus(S.sel.i, 'i'); }
     else { F = null; renderFocusBar(); }
@@ -3252,11 +3585,18 @@ function setView(v, quiet) {
     anim = null;
     $('empty').hidden = true;
     if (M && !M.classes.length) showEmpty();
+    if (v === 'radial') { const was = radReady && radialAtFit(); radialTargets(); if (was) radReady = false; }
+    settle();
+    if (v === 'radial') {
+      if (!radReady) { const c = fitRadial(); rcam.x = c.x; rcam.y = c.y; rcam.k = c.k; radReady = true; }
+      updateAllBtn();
+    }
     const sn = selNode();
     if (sn && !quiet) reveal(sn, !isVisible(sn));
   }
   if (!quiet) draw();
 }
+function updateAllBtn() { $('allBtn').setAttribute('aria-pressed', String(allLinksOn())); }
 
 /* ---------- search ---------- */
 
@@ -3484,9 +3824,9 @@ function renderClass(pb, i) {
   append(pb, textBlocks(c.comments));
   if (c.alts.length) pb.appendChild(h('p', { class: 'desc', style: 'color:var(--ink2)' }, 'Also called ' + Array.from(new Set(c.alts)).slice(0, 12).join(', ') + (c.alts.length > 12 ? ' and more' : '') + '.'));
   const acts = h('div', { class: 'acts' });
-  if (S.view === 'tree') acts.appendChild(h('button', { class: 'btn line', onclick: () => setView('focus') }, 'Focus on this'));
-  else acts.appendChild(h('button', { class: 'btn line', onclick: () => setView('tree') }, 'Show in tree'));
-  if (nd && nd.kids.length && S.view === 'tree') acts.appendChild(h('button', { class: 'btn line', title: 'Open every level below this ' + N[0], onclick: () => { if (nd.open) { nd.open = false; } toggle(nd, true); } }, 'Expand branch'));
+  if (S.view !== 'focus') acts.appendChild(h('button', { class: 'btn line', onclick: () => setView('focus') }, 'Focus on this'));
+  else acts.appendChild(h('button', { class: 'btn line', onclick: () => setView(lastTreeView) }, 'Show in tree'));
+  if (nd && nd.kids.length && S.view !== 'focus') acts.appendChild(h('button', { class: 'btn line', title: 'Open every level below this ' + N[0], onclick: () => { if (nd.open) { nd.open = false; } toggle(nd, true); } }, 'Expand branch'));
   pb.appendChild(acts);
 
   const ps = c.sup.concat(c.def.filter((p) => c.sup.indexOf(p) < 0));
@@ -3570,7 +3910,7 @@ function renderProp(pb, i) {
   pb.appendChild(iriLine(p.iri));
   append(pb, textBlocks(p.comments));
   const n = propRels[i].length;
-  if (n && S.view === 'tree') pb.appendChild(h('div', { class: 'callout', text: 'The tree shows where this property is used: ' + plural(n, 'link', 'links') + '. Dashed links end inside a collapsed branch.' }));
+  if (n && S.view !== 'focus') pb.appendChild(h('div', { class: 'callout', text: 'The picture shows where this property is used: ' + plural(n, 'link', 'links') + '. Dashed links end inside a collapsed branch.' }));
   const anyList = (cl, dt, ex) => {
     const ul = h('ul', { class: 'list' });
     cl.forEach((c) => ul.appendChild(h('li', null, classLink(c))));
@@ -3605,8 +3945,8 @@ function renderInd(pb, i) {
   pb.appendChild(h('h1', { class: 'title', text: indName(ind) }));
   pb.appendChild(iriLine(ind.iri));
   const acts = h('div', { class: 'acts' });
-  if (S.view === 'tree') acts.appendChild(h('button', { class: 'btn line', onclick: () => setView('focus') }, 'Focus on this'));
-  else acts.appendChild(h('button', { class: 'btn line', onclick: () => setView('tree') }, 'Show in tree'));
+  if (S.view !== 'focus') acts.appendChild(h('button', { class: 'btn line', onclick: () => setView('focus') }, 'Focus on this'));
+  else acts.appendChild(h('button', { class: 'btn line', onclick: () => setView(lastTreeView) }, 'Show in tree'));
   pb.appendChild(acts);
   if (ind.types.length) pb.appendChild(sec('Instance of', ind.types.length > 1 ? ind.types.length : null, capped(ind.types, classLink)));
   const out = [], inn = [], dv = [], ov = [];
@@ -3711,6 +4051,8 @@ function buildControls() {
     h('button', { class: 'btn', title: 'Fit everything on screen (F)', onclick: fitView }, 'Fit')));
   ctl.appendChild(h('div', { class: 'group', id: 'lvlGroup' }, h('span', { class: 'lbl', text: 'Levels' }), b('minus', 'Collapse the deepest level', () => stepLevel(-1), '['), h('span', { class: 'val', id: 'lvlVal', style: 'min-width:54px', text: '' }),
     b('plus', 'Open one more level', () => stepLevel(1), ']'), h('button', { class: 'btn', title: 'Open every level (0)', onclick: () => setLevel(maxDepth) }, 'All')));
+  ctl.appendChild(h('div', { class: 'group', id: 'allGroup', hidden: true }, h('button', { class: 'btn', id: 'allBtn', 'aria-pressed': 'false',
+    title: 'Draw every link between classes at once, bundled along the hierarchy', onclick: () => { S.allLinks = !allLinksOn(); updateAllBtn(); draw(); } }, 'All links')));
   $('panelToggle').appendChild(icon('panel'));
   $('panelHide').appendChild(icon('close'));
   $('optBtn').insertBefore(icon('sliders'), $('optBtn').firstChild);
@@ -3719,20 +4061,21 @@ function buildControls() {
 }
 function updateDepthLabel() { const e = $('lvlVal'); if (e) e.textContent = Math.max(0, visibleDepth()) + ' of ' + maxDepth; }
 let lastZoom = '';
-function updateZoomLabel() { const t = Math.round((S.view === 'tree' ? cam.k : fcam.k) * 100) + '%'; if (t !== lastZoom) { lastZoom = t; $('zoomVal').textContent = t; } }
-function activeCam() { return S.view === 'tree' ? cam : fcam; }
+function updateZoomLabel() { const t = Math.round(activeCam().k * 100) + '%'; if (t !== lastZoom) { lastZoom = t; $('zoomVal').textContent = t; } }
+function activeCam() { return S.view === 'tree' ? cam : S.view === 'radial' ? rcam : fcam; }
 function zoomAt(sx, sy, f) {
   const c = activeCam(), k1 = Math.max(MINK, Math.min(MAXK, c.k * f));
   c.x = sx - (sx - c.x) * k1 / c.k; c.y = sy - (sy - c.y) * k1 / c.k; c.k = k1;
   anim = null; settle(); draw();
 }
 function settle() {
-  if (S.view === 'tree') { for (let j = 0; j < vis.length; j++) { vis[j].x = vis[j].nx; vis[j].y = vis[j].ny; vis[j].a = 1; } ghosts = []; }
+  if (S.view !== 'focus') { for (let j = 0; j < vis.length; j++) { const n = vis[j]; n.x = n.nx; n.y = n.ny; n.rr = n.trr; n.th = n.tth; n.a = 1; } ghosts = []; }
   else if (F) F.nodes.forEach((o) => { o.x = o.nx; o.y = o.ny; });
 }
 function zoomBy(f) { zoomAt(W / 2, H / 2, f); }
 function fitView() {
   if (S.view === 'tree') moveCam(fitCam(false));
+  else if (S.view === 'radial') moveCam(fitRadial());
   else if (F) {
     const bx = F.box, pad = 40, padT = 64;
     const k = Math.max(0.2, Math.min(1, (W - pad * 2) / (bx[2] - bx[0]), (H - padT - pad - 40) / (bx[3] - bx[1])));
@@ -3750,7 +4093,7 @@ function renderFocusBar() {
       e.textContent = '';
       e.appendChild(h('div', null, h('h2', { text: 'Pick a ' + nouns()[0] + ' to focus on' }),
         h('p', { text: 'The focus view shows one ' + nouns()[0] + ' or individual with what it is connected to. Search for one above, or select it in the tree first.' }),
-        h('button', { class: 'btn primary', onclick: () => setView('tree') }, 'Back to the tree')));
+        h('button', { class: 'btn primary', onclick: () => setView(lastTreeView) }, 'Back to the tree')));
       e.hidden = false;
     }
     return;
@@ -3762,7 +4105,7 @@ function renderFocusBar() {
   fb.appendChild(h('div', { class: 'group' }, h('span', { class: 'muted', text: 'Around' }), h('span', { class: 'ttl', text: F.title }), seg));
   fb.appendChild(h('div', { class: 'group' }, h('span', { class: 'muted', text: F.omitted ? 'Showing ' + shown + ' of ' + nf.format(F.total) : F.kind === 'i' ? plural(shown, 'item', 'items') : plural(shown, nouns()[0], nouns()[1]) }),
     F.omitted ? h('button', { class: 'btn', onclick: moreFocus }, 'Show more') : null,
-    h('button', { class: 'btn', onclick: () => setView('tree') }, 'Show in tree')));
+    h('button', { class: 'btn', onclick: () => setView(lastTreeView) }, 'Show in tree')));
 }
 function moreFocus() { S.cap = Math.min(400, S.cap + 40); buildFocus(F.center, F.kind); }
 
@@ -3858,7 +4201,7 @@ function pasteDialog() {
 function helpDialog() {
   const keys = [['/', 'Search'], ['\u2190 \u2191 \u2192 \u2193', 'Move through the tree; \u2192 opens a branch, \u2190 closes it'], ['Space', 'Open or close the selected branch'], ['E', 'Open the whole branch below the selection'],
     ['1 \u2026 9', 'Show the tree down to that level'], ['[  ]', 'One level less, one level more'], ['0', 'Open every level'], ['F', 'Fit everything on screen'], ['C', 'Centre the selection'],
-    ['G', 'Switch between tree and focus view'], ['+  \u2212', 'Zoom'], ['P', 'Show or hide the details panel'], ['T', 'Light or dark'], ['Esc', 'Clear the search, then the selection']];
+    ['G', 'Next view: tree, circle, focus'], ['+  \u2212', 'Zoom'], ['P', 'Show or hide the details panel'], ['T', 'Light or dark'], ['Esc', 'Clear the search, then the selection']];
   const dl = h('dl', { class: 'keys' });
   keys.forEach((k) => { dl.appendChild(h('dt', null, k[0].split('  ').map((x) => [h('kbd', { text: x }), ' ']))); dl.appendChild(h('dd', { text: k[1] })); });
   const lg = h('div', { class: 'legend' });
@@ -3872,6 +4215,7 @@ function helpDialog() {
   openModal('How to read and move around', [
     h('p', { text: 'The tree only shows the hierarchy. Links between classes appear when you select or point at a class, so the picture stays readable however large the ontology is.' }),
     h('h3', { text: 'Lines' }), lg,
+    h('p', { text: 'The circle view puts the same tree on a circle: classes at the end of a branch sit on the rim, open branches inside it. Links run through the middle and follow the hierarchy, so those that go the same way share a path. "All links" draws every one of them at once.' }),
     h('p', { text: 'Individuals are listed under their class and found by the search. Selecting one shows what the file states about it, and the focus view draws it with the individuals it is linked to.' }),
     h('h3', { text: 'Mouse and trackpad' }),
     h('p', { text: 'Drag to move. Scroll to pan, and pinch or hold Ctrl (\u2318 on a Mac) while scrolling to zoom. Click a name to select it, click its dot to open or close the branch, and Alt-click the dot to open everything below. The numbers along the top edge collapse the tree to that level.' }),
@@ -3943,6 +4287,13 @@ function exportPng(show) {
     cvs.width = Math.max(1, Math.round(w * s)); cvs.height = Math.max(1, Math.round(h0 * s));
     c = cvs.getContext('2d');
     renderTree(c, cvs.width, cvs.height, { x: pad * s, y: (pad + ROW / 2) * s, k: s }, true);
+  } else if (S.view === 'radial') {
+    const D = 2 * (radT.R + radT.label + 30);
+    s = Math.min(2, 12000 / D);
+    cvs.width = Math.round(D * s); cvs.height = Math.round(D * s);
+    c = cvs.getContext('2d');
+    renderRadial(c, cvs.width, cvs.height, { x: cvs.width / 2, y: cvs.height / 2, k: s }, true);
+    draw();
   } else {
     if (!F) { toast('Select a class first'); return; }
     const pad = 40, bx = F.box;
@@ -3952,8 +4303,8 @@ function exportPng(show) {
     renderFocus(c, cvs.width, cvs.height, { x: (pad - bx[0]) * s, y: (pad - bx[1]) * s, k: s }, true);
   }
   draw();
-  const name = (fileLabel.replace(/\.[A-Za-z0-9]+$/, '').replace(/[^\w.\-]+/g, '_').replace(/^_+|_+$/g, '').slice(0, 60) || 'ontology') + (S.view === 'tree' ? '-tree' : '-focus') + '.png';
-  const small = S.view === 'tree' && 13 * s < 7;
+  const name = (fileLabel.replace(/\.[A-Za-z0-9]+$/, '').replace(/[^\w.\-]+/g, '_').replace(/^_+|_+$/g, '').slice(0, 60) || 'ontology') + (S.view === 'tree' ? '-tree' : S.view === 'radial' ? '-circle' : '-focus') + '.png';
+  const small = S.view !== 'focus' && 13 * s < 7;
   const note = small ? 'The tree is too large for a sharp image. Collapse some branches for readable labels.' : '';
   const showIt = (url) => {
     const img = h('img', { src: url, alt: 'Exported image of the current view' });
@@ -4139,6 +4490,7 @@ cv.addEventListener('pointermove', (ev) => {
   }
   if (ev.pointerType === 'touch') return;
   if (S.view === 'tree') { const ht = hitTree(p[0], p[1]); setHover(ht ? (ht.level ? { level: ht.level } : { n: ht.n }) : null, p[0], p[1]); }
+  else if (S.view === 'radial') { const ht = hitRadial(p[0], p[1]); setHover(ht ? { n: ht.n } : null, p[0], p[1]); }
   else { const o = hitFocus(p[0], p[1]); setHover(o ? { f: o } : null, p[0], p[1]); }
 });
 function endPointer(ev) {
@@ -4158,8 +4510,8 @@ cv.addEventListener('pointerleave', () => { if (!down) setHover(null); });
 
 function click(sx, sy, ev) {
   if (!M) return;
-  if (S.view === 'tree') {
-    const ht = hitTree(sx, sy);
+  if (S.view !== 'focus') {
+    const ht = S.view === 'tree' ? hitTree(sx, sy) : hitRadial(sx, sy);
     if (!ht) { clearSel(); return; }
     if (ht.level) { setLevel(ht.level); return; }
     const n = ht.n;
@@ -4175,8 +4527,8 @@ function click(sx, sy, ev) {
   }
 }
 cv.addEventListener('dblclick', (ev) => {
-  if (S.view !== 'tree' || !M) return;
-  const p = local(ev), ht = hitTree(p[0], p[1]);
+  if (S.view === 'focus' || !M) return;
+  const p = local(ev), ht = S.view === 'tree' ? hitTree(p[0], p[1]) : hitRadial(p[0], p[1]);
   if (ht && ht.n && ht.n.i >= 0 && ht.part === 'label' && ht.n.kids.length) toggle(ht.n, ev.altKey);
 });
 cv.addEventListener('wheel', (ev) => {
@@ -4223,12 +4575,12 @@ window.addEventListener('keydown', (ev) => {
   if (k === '/') { ev.preventDefault(); $('search').focus(); $('search').select(); return; }
   if (k === '?') { helpDialog(); return; }
   if (k === 'f' || k === 'F') { fitView(); return; }
-  if (k === 'g' || k === 'G') { setView(S.view === 'tree' ? 'focus' : 'tree'); renderPanel(); return; }
+  if (k === 'g' || k === 'G') { setView(S.view === 'tree' ? 'radial' : S.view === 'radial' ? 'focus' : 'tree'); renderPanel(); return; }
   if (k === 't' || k === 'T') { applyTheme(S.theme === 'dark' ? 'light' : 'dark'); return; }
   if (k === 'p' || k === 'P') { togglePanel(); return; }
   if (k === '+' || k === '=') { zoomBy(1.3); return; }
   if (k === '-' || k === '_') { zoomBy(1 / 1.3); return; }
-  if (S.view !== 'tree') return;
+  if (S.view === 'focus') return;
   if (tg && tg.tagName === 'BUTTON' && (k === ' ' || k === 'Enter')) return;
   if (k === 'c' || k === 'C') { const n = selNode(); if (n) reveal(n, true); return; }
   if (k === '0') { setLevel(maxDepth); return; }
@@ -4249,7 +4601,9 @@ function resize() {
   if (!w || !h1) return;
   const d = Math.min(2.5, window.devicePixelRatio || 1);
   if (w === W && h1 === H && d === dpr) return;
+  const refit = M && S.view === 'radial' && radReady && W > 0 && radialAtFit();
   W = w; H = h1; dpr = d;
+  if (refit) { const f = fitRadial(); rcam.x = f.x; rcam.y = f.y; rcam.k = f.k; }
   cv.width = Math.round(W * dpr); cv.height = Math.round(H * dpr);
   miniDirty = true;
   if (M) { if (rafId) { cancelAnimationFrame(rafId); rafId = 0; } frame(); }
@@ -4314,7 +4668,29 @@ if (/[#?&]debug\b/.test(location.hash + location.search)) {
       for (let i = 0; i < r.length; i++) for (let j = i + 1; j < r.length && r[j][1] < r[i][3]; j++) if (r[j][0] < r[i][2] && r[j][2] > r[i][0]) c++;
       return c;
     },
-    names: () => vis.slice(0, 60).map((n) => n.name)
+    names: () => vis.slice(0, 60).map((n) => n.name),
+    /* circle view: names on the rim must be at least a text height apart along the rim */
+    overlapsRadial: () => {
+      const r = vis.filter((n) => n !== root && !isInner(n)).map((n) => n.tth).sort((a, b) => a - b);
+      let c = 0;
+      for (let i = 1; i < r.length; i++) if ((r[i] - r[i - 1]) * radT.R < 13) c++;
+      if (r.length > 1 && (r[0] + TAU - r[r.length - 1]) * radT.R < 13) c++;
+      return c;
+    },
+    /* where on the page a name, its dot or its count is in the circle view */
+    radialAt: (name, part) => {
+      const n = vis.find((v) => v.name === name), b = cv.getBoundingClientRect();
+      if (!n) return null;
+      let x = n.trr * Math.cos(n.tth), y = n.trr * Math.sin(n.tth);
+      if (part !== 'dot') {
+        const q = innerHits.find((r) => r[4] === n);
+        if (q) { x = (q[0] + q[2]) / 2; y = (q[1] + q[3]) / 2; }
+        else if (isInner(n)) return null;
+        else { const d = n.trr + (part === 'chip' ? PADL + n.w + 12 : PADL + n.w / 2); x = d * Math.cos(n.tth); y = d * Math.sin(n.tth); }
+      }
+      return [b.left + x * rcam.k + rcam.x, b.top + y * rcam.k + rcam.y];
+    },
+    radial: () => ({ rim: Math.round(radT.R), zoom: rcam.k, allLinks: allLinksOn(), all: allList.length, innerNames: innerHits.length })
   };
 }
 init();

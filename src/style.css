@@ -102,6 +102,7 @@ kbd {
 .group { display: inline-flex; align-items: center; background: var(--surface); border: 1px solid var(--line); border-radius: 10px; padding: 2px; box-shadow: var(--shadow-s); pointer-events: auto; }
 .group .btn { height: 28px; border-radius: 7px; padding: 0 8px; }
 .group .btn.icon { width: 28px; padding: 0; }
+.group .btn[aria-pressed="true"] { background: var(--ink); color: var(--bg); }
 .group .val { padding: 0 6px; min-width: 46px; text-align: center; color: var(--ink2); font-variant-numeric: tabular-nums; }
 .group .lbl { padding: 0 4px 0 8px; color: var(--ink2); }
 #mini { position: absolute; right: 12px; bottom: 12px; border-radius: 10px; border: 1px solid var(--line); background: var(--surface); box-shadow: var(--shadow-s); cursor: pointer; touch-action: none; }

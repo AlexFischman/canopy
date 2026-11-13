@@ -45,11 +45,15 @@ async def main():
         print('levels via keys 2 ] [ 0 ->', d2, d3, d4, d5)
         # 5 focus view export
         await page.click('#search'); await page.keyboard.type('pianist'); await page.keyboard.press('Enter'); await page.wait_for_timeout(600)
-        await page.keyboard.press('g'); await page.wait_for_timeout(700)
+        await page.click('#viewSeg button[data-v=focus]'); await page.wait_for_timeout(700)
         async with page.expect_download() as dl:
             await page.click('#expBtn'); await page.click('.pop .item:nth-child(1)')
         d = await dl.value; fp = os.path.join(tempfile.gettempdir(), 'canopy-export-focus.png'); await d.save_as(fp); print('focus export:', d.suggested_filename, os.path.getsize(fp), 'bytes')
-        await page.keyboard.press('g'); await page.wait_for_timeout(500)
+        await page.click('#viewSeg button[data-v=radial]'); await page.wait_for_timeout(700)
+        async with page.expect_download() as dl:
+            await page.click('#expBtn'); await page.click('.pop .item:nth-child(1)')
+        d = await dl.value; fp = os.path.join(tempfile.gettempdir(), 'canopy-export-circle.png'); await d.save_as(fp); print('circle export:', d.suggested_filename, os.path.getsize(fp), 'bytes')
+        await page.click('#viewSeg button[data-v=tree]'); await page.wait_for_timeout(500)
         # 6 paste dialog
         await page.click('#fileBtn'); await page.click('.pop .item:nth-child(2)')
         await page.fill('#modal textarea', '@prefix : <http://e/> . @prefix owl: <http://www.w3.org/2002/07/owl#> . @prefix rdfs: <http://www.w3.org/2000/01/rdf-schema#> .\n:A a owl:Class . :B a owl:Class ; rdfs:subClassOf :A . :C a owl:Class ; rdfs:subClassOf :B, :A .')

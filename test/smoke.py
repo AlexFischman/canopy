@@ -41,7 +41,7 @@ async def main():
         print('string quartet panel:', (await ev("document.querySelector('#pbody').innerText")).replace('\n', ' / ')[:520])
         await page.click('#pbody .lnk >> nth=0'); await page.wait_for_timeout(500); print('after crumb click sel:', (await info())['sel'])
         # focus view, more, hops, back
-        await page.keyboard.press('g'); await page.wait_for_timeout(600)
+        await page.click('#viewSeg button[data-v=focus]'); await page.wait_for_timeout(600)
         await page.click('#focusBar .seg button >> nth=1'); await page.wait_for_timeout(600); print('focus bar:', (await ev("document.getElementById('focusBar').innerText")).replace('\n', ' '))
         more = await page.query_selector('#focusBar .btn:has-text("Show more")')
         if more: await more.click(); await page.wait_for_timeout(600); print('after show more:', (await ev("document.getElementById('focusBar').innerText")).replace('\n', ' '))
@@ -80,13 +80,39 @@ async def main():
         txt = (await ev("document.querySelector('#pbody').innerText")).replace('\n', ' / ')
         print('individual panel:', txt[:230]); assert 'composed by' in txt and 'Ludwig van Beethoven' in txt and '67' in txt, 'individual statements missing'
         print('individual selected:', (await info())['sel'], 'links on tree:', (await info())['arcs'])
-        await page.keyboard.press('g'); await page.wait_for_timeout(700)
+        await page.click('#viewSeg button[data-v=focus]'); await page.wait_for_timeout(700)
         print('individual focus:', (await ev("document.getElementById('focusBar').innerText")).replace('\n', ' '))
         await page.mouse.click(760, 470); await page.wait_for_timeout(600)
         await page.click('#pbody .lnk >> nth=0'); await page.wait_for_timeout(500)
-        await page.keyboard.press('g'); await page.wait_for_timeout(500)
+        await page.click('#viewSeg button[data-v=tree]'); await page.wait_for_timeout(500)
         await opt(lambda: page.click('.pop label.chk:has-text("Statements between individuals")'))
         await opt(lambda: page.click('.pop label.chk:has-text("Statements between individuals")'))
+        # circle view: same tree on a circle; click a name, open and close a branch, links, levels, zoom, keys
+        await page.keyboard.press('Escape'); await page.keyboard.press('Escape'); await page.keyboard.press('3'); await page.wait_for_timeout(500)
+        await page.click('#viewSeg button[data-v=radial]'); await page.wait_for_timeout(700)
+        rad = lambda: ev('canopyDebug.radial()')
+        at = lambda name, part='label': ev('canopyDebug.radialAt(%s, %s)' % (json.dumps(name), json.dumps(part)))
+        r0 = await rad(); print('circle:', (await info())['view'], r0, 'rim overlaps:', await ev('canopyDebug.overlapsRadial()'))
+        assert (await info())['view'] == 'radial' and await ev('canopyDebug.overlapsRadial()') == 0
+        xy = await at('Composer'); await page.mouse.click(*xy); await page.wait_for_timeout(400)
+        txt = await ev("document.querySelector('#pbody h1, #pbody .title, #pbody').innerText"); assert 'Composer' in txt, 'click on a rim name did not select it'
+        print('circle click on rim name -> panel shows Composer; links drawn:', (await info())['arcs'])
+        v0 = (await info())['visible']; xy = await at('Ensemble', 'dot'); await page.mouse.click(*xy); await page.wait_for_timeout(600)
+        v1 = (await info())['visible']; assert v1 > v0, 'click on a closed branch did not open it'
+        xy = await at('Ensemble', 'dot'); await page.mouse.click(*xy); await page.wait_for_timeout(600)
+        v2 = (await info())['visible']; assert v2 == v0, 'click on an open branch did not close it'
+        xy = await at('Instrument'); await page.mouse.click(*xy); await page.wait_for_timeout(400)
+        assert 'Instrument' in await ev("document.querySelector('#pbody').innerText"), 'click on a name inside the circle did not select it'
+        print('circle open/close branch:', v0, '->', v1, '->', v2, '| inner name selects | still fitted:', abs((await rad())['zoom'] - r0['zoom']) < 0.2)
+        a0 = (await rad())['allLinks']; await page.click('#allBtn'); await page.wait_for_timeout(300); a1 = (await rad())['allLinks']; await page.click('#allBtn'); await page.wait_for_timeout(300)
+        assert a0 != a1, 'All links button did nothing'
+        await page.keyboard.press('0'); await page.wait_for_timeout(700); print('circle all levels:', await rad(), 'rim overlaps:', await ev('canopyDebug.overlapsRadial()'))
+        assert await ev('canopyDebug.overlapsRadial()') == 0
+        await page.mouse.move(600, 420); await page.keyboard.down('Control'); await page.mouse.wheel(0, -200); await page.keyboard.up('Control'); await page.wait_for_timeout(300)
+        z1 = (await rad())['zoom']; await page.mouse.move(500, 400); await page.mouse.down(); await page.mouse.move(430, 350, steps=4); await page.mouse.up()
+        await page.keyboard.press('f'); await page.wait_for_timeout(400); z2 = (await rad())['zoom']; print('circle zoom in then fit: %.2f -> %.2f' % (z1, z2), 'frame ms:', await ev('canopyDebug.frame()'))
+        await page.keyboard.press('Escape'); await page.keyboard.press('g'); await page.wait_for_timeout(400); vw = (await info())['view']
+        await page.keyboard.press('g'); await page.wait_for_timeout(400); print('G from circle ->', vw, '->', (await info())['view'])
         # theme persisted across reload
         await page.keyboard.press('t'); th = await ev("document.documentElement.getAttribute('data-theme')")
         await page.reload(); await page.wait_for_timeout(500); print('theme persisted:', th, '->', await ev("document.documentElement.getAttribute('data-theme')"))

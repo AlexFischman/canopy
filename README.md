@@ -12,8 +12,8 @@ Most ontology viewers draw classes and every relation between them in one force-
 
 Canopy separates the two:
 
-- **The hierarchy gets a deterministic layout.** A collapsible left-to-right tree in which every class has a stable place and labels never overlap.
-- **Relations are drawn on demand.** Property and restriction links appear for the class you select or point at, not all at once.
+- **The hierarchy gets a deterministic layout.** A collapsible tree, drawn left to right or on a circle, in which every class has a stable place and labels never overlap.
+- **Relations are drawn on demand.** Property and restriction links appear for the class you select or point at. The circle view can also draw all of them at once, because there they follow the hierarchy and form bundles instead of a tangle.
 - **You control how much is visible.** Collapse to a level, search and jump, or switch to a focus view of one class and its neighbours.
 
 ## What it does
@@ -22,6 +22,7 @@ Canopy separates the two:
 |---|---|
 | **Formats** | RDF/XML (`.owl`, `.rdf`), Turtle (`.ttl`), N-Triples (`.nt`). Open by file picker, drag and drop, or paste. Dropping several files merges them, for example an ontology and its imports. |
 | **Tree view** | Collapsible hierarchy, coloured by top-level branch. Ancestors stay pinned at the edge of the screen while you scroll through a long list of siblings. Classes with several parents appear once; the other parents are drawn when you select the class. |
+| **Circle view** | The same tree on a circle, which fits several times as many classes on one screen. Classes at the end of a branch sit on the rim, open branches inside it. Links run through the middle along the hierarchy, so links between the same branches share a path. Zoomed out, the largest branches keep upright, readable names. |
 | **Focus view** | One class or individual with what it is connected to: parents and incoming links on the left, children and targets on the right, one or two steps out. Click a neighbour to refocus. |
 | **Details panel** | Label, IRI, description, superclasses, subclasses, properties (direct and inherited), restrictions in Manchester-style text, equivalences, disjointness, individuals, annotations. |
 | **Individuals** | Listed under their class, searchable and clickable. Each has a panel with its statements, the individuals that refer to it and its data values, and its own focus view. For a selected class, the tree also draws links counted from the statements between individuals, for example `hasMaker (5)`. |
@@ -29,6 +30,10 @@ Canopy separates the two:
 | **Large files** | Parsing runs in a background worker; only what is on screen is drawn. Zoomed out, the largest branches keep readable labels. |
 | **Export** | PNG of the current view, or the visible outline as text. |
 | **Also** | Light and dark theme, label language switch, keyboard navigation, SKOS concept schemes when a file has no OWL classes. |
+
+![The sample ontology in the circle view, with one class selected and all links drawn](docs/circle.png)
+
+![All 1,595 current classes of Brick in the circle view](docs/circle-large.png)
 
 ![Focus view of one class from the Human Disease Ontology](docs/focus.png)
 
@@ -60,7 +65,7 @@ python3 build.py        # writes canopy.html
 | File | Content |
 |---|---|
 | `src/core.js` | Turtle/N-Triples parser, RDF/XML parser (with its own small XML reader), and the schema model. No DOM; runs in the page, in a worker and in Node. |
-| `src/ui-a.js` | Tree layout, canvas rendering, relation arcs, minimap, focus view. |
+| `src/ui-a.js` | Tree layout, canvas rendering, relation arcs, minimap, circle view, focus view. |
 | `src/ui-b.js` | Details panel, search, menus, dialogs, file handling, input. |
 | `src/sample.ttl` | The built-in sample ontology. |
 | `src/style.css`, `src/template.html` | Styles and page skeleton. |
@@ -74,7 +79,7 @@ pip install rdflib playwright && playwright install chromium
 test/fetch-data.sh                      # ontologies and the W3C parser test suites, about 85 MB
 python3 test/w3c.py                     # parser conformance
 python3 test/compare.py +test/data/wine/wine.owl test/data/doid/doid.owl    # model against rdflib
-python3 test/large.py                   # load time, label overlaps and frame time per ontology
+python3 test/large.py                   # load time, label overlaps and frame time per ontology, tree and circle
 python3 test/smoke.py                   # every control once, fails on any page error
 python3 test/interact.py                # export, zoom, levels, paste, narrow screens, no network
 ```

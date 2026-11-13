@@ -99,7 +99,7 @@ function setModel(model, label, sample) {
     }
   });
   P.forEach((p, i) => { p.sup.forEach((s) => subProps[s].push(i)); p.dom.forEach((c) => domProps[c].push(i)); p.rng.forEach((c) => rngProps[c].push(i)); });
-  S.sel = null; S.hover = null; S.query = ''; matches = null; F = null; S.cap = 40; S.hops = 1; S.tab = 'details';
+  S.sel = null; S.hover = null; S.query = ''; matches = null; F = null; S.cap = 40; S.hops = 1; S.tab = 'details'; S.allLinks = null; radReady = false;
   S.f.dep = false; S.f.ext = true;
   $('search').value = ''; $('results').hidden = true;
   nodes = [];
@@ -118,7 +118,7 @@ function rebuild(keepOpen) {
   arcKey = '';
   if (S.query) runSearch(S.query, true);
   relayout({});
-  if (!keepOpen) { const c = fitCam(true); cam.x = c.x; cam.y = c.y; cam.k = c.k; }
+  if (!keepOpen) { const c = fitCam(true); cam.x = c.x; cam.y = c.y; cam.k = c.k; radReady = false; }
   $('empty').hidden = true;
   if (!M.classes.length) showEmpty();
   if (S.view === 'focus') { if (S.sel && S.sel.t === 'c') buildFocus(S.sel.i); else if (S.sel && S.sel.t === 'i') buildFocus(S.sel.i, 'i'); else F = null; }
@@ -166,13 +166,13 @@ function selectClass(i, opts) {
     if (!nodes[i]) return;
   }
   S.sel = { t: 'c', i: i }; S.tab = 'details'; arcKey = '';
-  if (S.view === 'tree') { if (opts.reveal === false) draw(); else reveal(nodes[i], opts.center); }
+  if (S.view !== 'focus') { if (opts.reveal === false) draw(); else reveal(nodes[i], opts.center); }
   else buildFocus(i);
   renderPanel();
 }
 function selectInd(i) {
   S.sel = { t: 'i', i: i }; S.tab = 'details'; arcKey = '';
-  if (S.view === 'tree') {
+  if (S.view !== 'focus') {
     const ts = M.inds[i].types;
     let tn = null;
     for (let j = 0; j < ts.length && !tn; j++) tn = nodes[ts[j]] || null;
@@ -183,21 +183,24 @@ function selectInd(i) {
 function selectProp(i) {
   S.sel = { t: 'p', i: i }; S.tab = 'details'; arcKey = '';
   renderPanel(); draw();
-  if (S.view === 'tree') { buildArcs(); if (arcNote) toast(arcNote); }
+  if (S.view !== 'focus') { buildArcs(); if (arcNote) toast(arcNote); }
 }
 function clearSel() {
   if (!S.sel) return;
   S.sel = null; arcKey = '';
   renderPanel(); draw();
 }
+let lastTreeView = 'tree';
 function setView(v, quiet) {
   S.view = v;
+  if (v !== 'focus') lastTreeView = v;
   $('viewSeg').querySelectorAll('button').forEach((b) => b.setAttribute('aria-pressed', String(b.dataset.v === v)));
   $('focusBar').hidden = v !== 'focus';
-  $('lvlGroup').hidden = v !== 'tree';
+  $('lvlGroup').hidden = v === 'focus';
+  $('allGroup').hidden = v !== 'radial';
+  if (v !== 'tree') mini.hidden = true;
   S.hover = null; hideTip();
   if (v === 'focus') {
-    mini.hidden = true;
     if (S.sel && S.sel.t === 'c' && nodes[S.sel.i]) { F = null; buildFocus(S.sel.i); }
     else if (S.sel && S.sel.t === 'i') { F = null; buildFocus(S.sel.i, 'i'); }
     else { F = null; renderFocusBar(); }
@@ -205,11 +208,18 @@ function setView(v, quiet) {
     anim = null;
     $('empty').hidden = true;
     if (M && !M.classes.length) showEmpty();
+    if (v === 'radial') { const was = radReady && radialAtFit(); radialTargets(); if (was) radReady = false; }
+    settle();
+    if (v === 'radial') {
+      if (!radReady) { const c = fitRadial(); rcam.x = c.x; rcam.y = c.y; rcam.k = c.k; radReady = true; }
+      updateAllBtn();
+    }
     const sn = selNode();
     if (sn && !quiet) reveal(sn, !isVisible(sn));
   }
   if (!quiet) draw();
 }
+function updateAllBtn() { $('allBtn').setAttribute('aria-pressed', String(allLinksOn())); }
 
 /* ---------- search ---------- */
 
@@ -437,9 +447,9 @@ function renderClass(pb, i) {
   append(pb, textBlocks(c.comments));
   if (c.alts.length) pb.appendChild(h('p', { class: 'desc', style: 'color:var(--ink2)' }, 'Also called ' + Array.from(new Set(c.alts)).slice(0, 12).join(', ') + (c.alts.length > 12 ? ' and more' : '') + '.'));
   const acts = h('div', { class: 'acts' });
-  if (S.view === 'tree') acts.appendChild(h('button', { class: 'btn line', onclick: () => setView('focus') }, 'Focus on this'));
-  else acts.appendChild(h('button', { class: 'btn line', onclick: () => setView('tree') }, 'Show in tree'));
-  if (nd && nd.kids.length && S.view === 'tree') acts.appendChild(h('button', { class: 'btn line', title: 'Open every level below this ' + N[0], onclick: () => { if (nd.open) { nd.open = false; } toggle(nd, true); } }, 'Expand branch'));
+  if (S.view !== 'focus') acts.appendChild(h('button', { class: 'btn line', onclick: () => setView('focus') }, 'Focus on this'));
+  else acts.appendChild(h('button', { class: 'btn line', onclick: () => setView(lastTreeView) }, 'Show in tree'));
+  if (nd && nd.kids.length && S.view !== 'focus') acts.appendChild(h('button', { class: 'btn line', title: 'Open every level below this ' + N[0], onclick: () => { if (nd.open) { nd.open = false; } toggle(nd, true); } }, 'Expand branch'));
   pb.appendChild(acts);
 
   const ps = c.sup.concat(c.def.filter((p) => c.sup.indexOf(p) < 0));
@@ -523,7 +533,7 @@ function renderProp(pb, i) {
   pb.appendChild(iriLine(p.iri));
   append(pb, textBlocks(p.comments));
   const n = propRels[i].length;
-  if (n && S.view === 'tree') pb.appendChild(h('div', { class: 'callout', text: 'The tree shows where this property is used: ' + plural(n, 'link', 'links') + '. Dashed links end inside a collapsed branch.' }));
+  if (n && S.view !== 'focus') pb.appendChild(h('div', { class: 'callout', text: 'The picture shows where this property is used: ' + plural(n, 'link', 'links') + '. Dashed links end inside a collapsed branch.' }));
   const anyList = (cl, dt, ex) => {
     const ul = h('ul', { class: 'list' });
     cl.forEach((c) => ul.appendChild(h('li', null, classLink(c))));
@@ -558,8 +568,8 @@ function renderInd(pb, i) {
   pb.appendChild(h('h1', { class: 'title', text: indName(ind) }));
   pb.appendChild(iriLine(ind.iri));
   const acts = h('div', { class: 'acts' });
-  if (S.view === 'tree') acts.appendChild(h('button', { class: 'btn line', onclick: () => setView('focus') }, 'Focus on this'));
-  else acts.appendChild(h('button', { class: 'btn line', onclick: () => setView('tree') }, 'Show in tree'));
+  if (S.view !== 'focus') acts.appendChild(h('button', { class: 'btn line', onclick: () => setView('focus') }, 'Focus on this'));
+  else acts.appendChild(h('button', { class: 'btn line', onclick: () => setView(lastTreeView) }, 'Show in tree'));
   pb.appendChild(acts);
   if (ind.types.length) pb.appendChild(sec('Instance of', ind.types.length > 1 ? ind.types.length : null, capped(ind.types, classLink)));
   const out = [], inn = [], dv = [], ov = [];
@@ -664,6 +674,8 @@ function buildControls() {
     h('button', { class: 'btn', title: 'Fit everything on screen (F)', onclick: fitView }, 'Fit')));
   ctl.appendChild(h('div', { class: 'group', id: 'lvlGroup' }, h('span', { class: 'lbl', text: 'Levels' }), b('minus', 'Collapse the deepest level', () => stepLevel(-1), '['), h('span', { class: 'val', id: 'lvlVal', style: 'min-width:54px', text: '' }),
     b('plus', 'Open one more level', () => stepLevel(1), ']'), h('button', { class: 'btn', title: 'Open every level (0)', onclick: () => setLevel(maxDepth) }, 'All')));
+  ctl.appendChild(h('div', { class: 'group', id: 'allGroup', hidden: true }, h('button', { class: 'btn', id: 'allBtn', 'aria-pressed': 'false',
+    title: 'Draw every link between classes at once, bundled along the hierarchy', onclick: () => { S.allLinks = !allLinksOn(); updateAllBtn(); draw(); } }, 'All links')));
   $('panelToggle').appendChild(icon('panel'));
   $('panelHide').appendChild(icon('close'));
   $('optBtn').insertBefore(icon('sliders'), $('optBtn').firstChild);
@@ -672,20 +684,21 @@ function buildControls() {
 }
 function updateDepthLabel() { const e = $('lvlVal'); if (e) e.textContent = Math.max(0, visibleDepth()) + ' of ' + maxDepth; }
 let lastZoom = '';
-function updateZoomLabel() { const t = Math.round((S.view === 'tree' ? cam.k : fcam.k) * 100) + '%'; if (t !== lastZoom) { lastZoom = t; $('zoomVal').textContent = t; } }
-function activeCam() { return S.view === 'tree' ? cam : fcam; }
+function updateZoomLabel() { const t = Math.round(activeCam().k * 100) + '%'; if (t !== lastZoom) { lastZoom = t; $('zoomVal').textContent = t; } }
+function activeCam() { return S.view === 'tree' ? cam : S.view === 'radial' ? rcam : fcam; }
 function zoomAt(sx, sy, f) {
   const c = activeCam(), k1 = Math.max(MINK, Math.min(MAXK, c.k * f));
   c.x = sx - (sx - c.x) * k1 / c.k; c.y = sy - (sy - c.y) * k1 / c.k; c.k = k1;
   anim = null; settle(); draw();
 }
 function settle() {
-  if (S.view === 'tree') { for (let j = 0; j < vis.length; j++) { vis[j].x = vis[j].nx; vis[j].y = vis[j].ny; vis[j].a = 1; } ghosts = []; }
+  if (S.view !== 'focus') { for (let j = 0; j < vis.length; j++) { const n = vis[j]; n.x = n.nx; n.y = n.ny; n.rr = n.trr; n.th = n.tth; n.a = 1; } ghosts = []; }
   else if (F) F.nodes.forEach((o) => { o.x = o.nx; o.y = o.ny; });
 }
 function zoomBy(f) { zoomAt(W / 2, H / 2, f); }
 function fitView() {
   if (S.view === 'tree') moveCam(fitCam(false));
+  else if (S.view === 'radial') moveCam(fitRadial());
   else if (F) {
     const bx = F.box, pad = 40, padT = 64;
     const k = Math.max(0.2, Math.min(1, (W - pad * 2) / (bx[2] - bx[0]), (H - padT - pad - 40) / (bx[3] - bx[1])));
@@ -703,7 +716,7 @@ function renderFocusBar() {
       e.textContent = '';
       e.appendChild(h('div', null, h('h2', { text: 'Pick a ' + nouns()[0] + ' to focus on' }),
         h('p', { text: 'The focus view shows one ' + nouns()[0] + ' or individual with what it is connected to. Search for one above, or select it in the tree first.' }),
-        h('button', { class: 'btn primary', onclick: () => setView('tree') }, 'Back to the tree')));
+        h('button', { class: 'btn primary', onclick: () => setView(lastTreeView) }, 'Back to the tree')));
       e.hidden = false;
     }
     return;
@@ -715,7 +728,7 @@ function renderFocusBar() {
   fb.appendChild(h('div', { class: 'group' }, h('span', { class: 'muted', text: 'Around' }), h('span', { class: 'ttl', text: F.title }), seg));
   fb.appendChild(h('div', { class: 'group' }, h('span', { class: 'muted', text: F.omitted ? 'Showing ' + shown + ' of ' + nf.format(F.total) : F.kind === 'i' ? plural(shown, 'item', 'items') : plural(shown, nouns()[0], nouns()[1]) }),
     F.omitted ? h('button', { class: 'btn', onclick: moreFocus }, 'Show more') : null,
-    h('button', { class: 'btn', onclick: () => setView('tree') }, 'Show in tree')));
+    h('button', { class: 'btn', onclick: () => setView(lastTreeView) }, 'Show in tree')));
 }
 function moreFocus() { S.cap = Math.min(400, S.cap + 40); buildFocus(F.center, F.kind); }
 
@@ -811,7 +824,7 @@ function pasteDialog() {
 function helpDialog() {
   const keys = [['/', 'Search'], ['← ↑ → ↓', 'Move through the tree; → opens a branch, ← closes it'], ['Space', 'Open or close the selected branch'], ['E', 'Open the whole branch below the selection'],
     ['1 … 9', 'Show the tree down to that level'], ['[  ]', 'One level less, one level more'], ['0', 'Open every level'], ['F', 'Fit everything on screen'], ['C', 'Centre the selection'],
-    ['G', 'Switch between tree and focus view'], ['+  −', 'Zoom'], ['P', 'Show or hide the details panel'], ['T', 'Light or dark'], ['Esc', 'Clear the search, then the selection']];
+    ['G', 'Next view: tree, circle, focus'], ['+  −', 'Zoom'], ['P', 'Show or hide the details panel'], ['T', 'Light or dark'], ['Esc', 'Clear the search, then the selection']];
   const dl = h('dl', { class: 'keys' });
   keys.forEach((k) => { dl.appendChild(h('dt', null, k[0].split('  ').map((x) => [h('kbd', { text: x }), ' ']))); dl.appendChild(h('dd', { text: k[1] })); });
   const lg = h('div', { class: 'legend' });
@@ -825,6 +838,7 @@ function helpDialog() {
   openModal('How to read and move around', [
     h('p', { text: 'The tree only shows the hierarchy. Links between classes appear when you select or point at a class, so the picture stays readable however large the ontology is.' }),
     h('h3', { text: 'Lines' }), lg,
+    h('p', { text: 'The circle view puts the same tree on a circle: classes at the end of a branch sit on the rim, open branches inside it. Links run through the middle and follow the hierarchy, so those that go the same way share a path. "All links" draws every one of them at once.' }),
     h('p', { text: 'Individuals are listed under their class and found by the search. Selecting one shows what the file states about it, and the focus view draws it with the individuals it is linked to.' }),
     h('h3', { text: 'Mouse and trackpad' }),
     h('p', { text: 'Drag to move. Scroll to pan, and pinch or hold Ctrl (⌘ on a Mac) while scrolling to zoom. Click a name to select it, click its dot to open or close the branch, and Alt-click the dot to open everything below. The numbers along the top edge collapse the tree to that level.' }),
@@ -896,6 +910,13 @@ function exportPng(show) {
     cvs.width = Math.max(1, Math.round(w * s)); cvs.height = Math.max(1, Math.round(h0 * s));
     c = cvs.getContext('2d');
     renderTree(c, cvs.width, cvs.height, { x: pad * s, y: (pad + ROW / 2) * s, k: s }, true);
+  } else if (S.view === 'radial') {
+    const D = 2 * (radT.R + radT.label + 30);
+    s = Math.min(2, 12000 / D);
+    cvs.width = Math.round(D * s); cvs.height = Math.round(D * s);
+    c = cvs.getContext('2d');
+    renderRadial(c, cvs.width, cvs.height, { x: cvs.width / 2, y: cvs.height / 2, k: s }, true);
+    draw();
   } else {
     if (!F) { toast('Select a class first'); return; }
     const pad = 40, bx = F.box;
@@ -905,8 +926,8 @@ function exportPng(show) {
     renderFocus(c, cvs.width, cvs.height, { x: (pad - bx[0]) * s, y: (pad - bx[1]) * s, k: s }, true);
   }
   draw();
-  const name = (fileLabel.replace(/\.[A-Za-z0-9]+$/, '').replace(/[^\w.\-]+/g, '_').replace(/^_+|_+$/g, '').slice(0, 60) || 'ontology') + (S.view === 'tree' ? '-tree' : '-focus') + '.png';
-  const small = S.view === 'tree' && 13 * s < 7;
+  const name = (fileLabel.replace(/\.[A-Za-z0-9]+$/, '').replace(/[^\w.\-]+/g, '_').replace(/^_+|_+$/g, '').slice(0, 60) || 'ontology') + (S.view === 'tree' ? '-tree' : S.view === 'radial' ? '-circle' : '-focus') + '.png';
+  const small = S.view !== 'focus' && 13 * s < 7;
   const note = small ? 'The tree is too large for a sharp image. Collapse some branches for readable labels.' : '';
   const showIt = (url) => {
     const img = h('img', { src: url, alt: 'Exported image of the current view' });
@@ -1092,6 +1113,7 @@ cv.addEventListener('pointermove', (ev) => {
   }
   if (ev.pointerType === 'touch') return;
   if (S.view === 'tree') { const ht = hitTree(p[0], p[1]); setHover(ht ? (ht.level ? { level: ht.level } : { n: ht.n }) : null, p[0], p[1]); }
+  else if (S.view === 'radial') { const ht = hitRadial(p[0], p[1]); setHover(ht ? { n: ht.n } : null, p[0], p[1]); }
   else { const o = hitFocus(p[0], p[1]); setHover(o ? { f: o } : null, p[0], p[1]); }
 });
 function endPointer(ev) {
@@ -1111,8 +1133,8 @@ cv.addEventListener('pointerleave', () => { if (!down) setHover(null); });
 
 function click(sx, sy, ev) {
   if (!M) return;
-  if (S.view === 'tree') {
-    const ht = hitTree(sx, sy);
+  if (S.view !== 'focus') {
+    const ht = S.view === 'tree' ? hitTree(sx, sy) : hitRadial(sx, sy);
     if (!ht) { clearSel(); return; }
     if (ht.level) { setLevel(ht.level); return; }
     const n = ht.n;
@@ -1128,8 +1150,8 @@ function click(sx, sy, ev) {
   }
 }
 cv.addEventListener('dblclick', (ev) => {
-  if (S.view !== 'tree' || !M) return;
-  const p = local(ev), ht = hitTree(p[0], p[1]);
+  if (S.view === 'focus' || !M) return;
+  const p = local(ev), ht = S.view === 'tree' ? hitTree(p[0], p[1]) : hitRadial(p[0], p[1]);
   if (ht && ht.n && ht.n.i >= 0 && ht.part === 'label' && ht.n.kids.length) toggle(ht.n, ev.altKey);
 });
 cv.addEventListener('wheel', (ev) => {
@@ -1176,12 +1198,12 @@ window.addEventListener('keydown', (ev) => {
   if (k === '/') { ev.preventDefault(); $('search').focus(); $('search').select(); return; }
   if (k === '?') { helpDialog(); return; }
   if (k === 'f' || k === 'F') { fitView(); return; }
-  if (k === 'g' || k === 'G') { setView(S.view === 'tree' ? 'focus' : 'tree'); renderPanel(); return; }
+  if (k === 'g' || k === 'G') { setView(S.view === 'tree' ? 'radial' : S.view === 'radial' ? 'focus' : 'tree'); renderPanel(); return; }
   if (k === 't' || k === 'T') { applyTheme(S.theme === 'dark' ? 'light' : 'dark'); return; }
   if (k === 'p' || k === 'P') { togglePanel(); return; }
   if (k === '+' || k === '=') { zoomBy(1.3); return; }
   if (k === '-' || k === '_') { zoomBy(1 / 1.3); return; }
-  if (S.view !== 'tree') return;
+  if (S.view === 'focus') return;
   if (tg && tg.tagName === 'BUTTON' && (k === ' ' || k === 'Enter')) return;
   if (k === 'c' || k === 'C') { const n = selNode(); if (n) reveal(n, true); return; }
   if (k === '0') { setLevel(maxDepth); return; }
@@ -1202,7 +1224,9 @@ function resize() {
   if (!w || !h1) return;
   const d = Math.min(2.5, window.devicePixelRatio || 1);
   if (w === W && h1 === H && d === dpr) return;
+  const refit = M && S.view === 'radial' && radReady && W > 0 && radialAtFit();
   W = w; H = h1; dpr = d;
+  if (refit) { const f = fitRadial(); rcam.x = f.x; rcam.y = f.y; rcam.k = f.k; }
   cv.width = Math.round(W * dpr); cv.height = Math.round(H * dpr);
   miniDirty = true;
   if (M) { if (rafId) { cancelAnimationFrame(rafId); rafId = 0; } frame(); }
@@ -1267,7 +1291,29 @@ if (/[#?&]debug\b/.test(location.hash + location.search)) {
       for (let i = 0; i < r.length; i++) for (let j = i + 1; j < r.length && r[j][1] < r[i][3]; j++) if (r[j][0] < r[i][2] && r[j][2] > r[i][0]) c++;
       return c;
     },
-    names: () => vis.slice(0, 60).map((n) => n.name)
+    names: () => vis.slice(0, 60).map((n) => n.name),
+    /* circle view: names on the rim must be at least a text height apart along the rim */
+    overlapsRadial: () => {
+      const r = vis.filter((n) => n !== root && !isInner(n)).map((n) => n.tth).sort((a, b) => a - b);
+      let c = 0;
+      for (let i = 1; i < r.length; i++) if ((r[i] - r[i - 1]) * radT.R < 13) c++;
+      if (r.length > 1 && (r[0] + TAU - r[r.length - 1]) * radT.R < 13) c++;
+      return c;
+    },
+    /* where on the page a name, its dot or its count is in the circle view */
+    radialAt: (name, part) => {
+      const n = vis.find((v) => v.name === name), b = cv.getBoundingClientRect();
+      if (!n) return null;
+      let x = n.trr * Math.cos(n.tth), y = n.trr * Math.sin(n.tth);
+      if (part !== 'dot') {
+        const q = innerHits.find((r) => r[4] === n);
+        if (q) { x = (q[0] + q[2]) / 2; y = (q[1] + q[3]) / 2; }
+        else if (isInner(n)) return null;
+        else { const d = n.trr + (part === 'chip' ? PADL + n.w + 12 : PADL + n.w / 2); x = d * Math.cos(n.tth); y = d * Math.sin(n.tth); }
+      }
+      return [b.left + x * rcam.k + rcam.x, b.top + y * rcam.k + rcam.y];
+    },
+    radial: () => ({ rim: Math.round(radT.R), zoom: rcam.k, allLinks: allLinksOn(), all: allList.length, innerNames: innerHits.length })
   };
 }
 init();
