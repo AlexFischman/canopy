@@ -1,0 +1,200 @@
+@prefix : <https://example.org/orchestra#> .
+@prefix owl: <http://www.w3.org/2002/07/owl#> .
+@prefix rdf: <http://www.w3.org/1999/02/22-rdf-syntax-ns#> .
+@prefix rdfs: <http://www.w3.org/2000/01/rdf-schema#> .
+@prefix xsd: <http://www.w3.org/2001/XMLSchema#> .
+@prefix skos: <http://www.w3.org/2004/02/skos/core#> .
+@prefix dcterms: <http://purl.org/dc/terms/> .
+
+<https://example.org/orchestra> a owl:Ontology ;
+    dcterms:title "Orchestra, a sample ontology"@en ;
+    dcterms:description "A small ontology about instruments, musicians, ensembles and performances. It ships with Canopy so there is something to explore before you open your own file."@en ;
+    owl:versionInfo "1.0" .
+
+### Instruments
+
+:Instrument a owl:Class ; rdfs:label "Instrument"@en, "Instrument"@de ;
+    rdfs:comment "A device made or adapted to produce musical sound."@en .
+
+:StringInstrument a owl:Class ; rdfs:subClassOf :Instrument ; rdfs:label "String instrument"@en, "Saiteninstrument"@de ;
+    rdfs:comment "An instrument whose sound comes from vibrating strings."@en .
+:BowedString a owl:Class ; rdfs:subClassOf :StringInstrument ; rdfs:label "Bowed string"@en, "Streichinstrument"@de .
+:PluckedString a owl:Class ; rdfs:subClassOf :StringInstrument ; rdfs:label "Plucked string"@en, "Zupfinstrument"@de .
+:StruckString a owl:Class ; rdfs:subClassOf :StringInstrument ; rdfs:label "Struck string"@en, "Schlagsaiteninstrument"@de .
+:Violin a owl:Class ; rdfs:subClassOf :BowedString ; rdfs:label "Violin"@en, "Violine"@de ; skos:altLabel "Fiddle"@en, "Geige"@de .
+:Viola a owl:Class ; rdfs:subClassOf :BowedString ; rdfs:label "Viola"@en, "Bratsche"@de .
+:Cello a owl:Class ; rdfs:subClassOf :BowedString ; rdfs:label "Cello"@en, "Violoncello"@de .
+:DoubleBass a owl:Class ; rdfs:subClassOf :BowedString ; rdfs:label "Double bass"@en, "Kontrabass"@de .
+:Harp a owl:Class ; rdfs:subClassOf :PluckedString ; rdfs:label "Harp"@en, "Harfe"@de .
+:Guitar a owl:Class ; rdfs:subClassOf :PluckedString ; rdfs:label "Guitar"@en, "Gitarre"@de .
+:Lute a owl:Class ; rdfs:subClassOf :PluckedString ; rdfs:label "Lute"@en, "Laute"@de .
+:Dulcimer a owl:Class ; rdfs:subClassOf :StruckString ; rdfs:label "Hammered dulcimer"@en, "Hackbrett"@de .
+
+:KeyboardInstrument a owl:Class ; rdfs:subClassOf :Instrument ; rdfs:label "Keyboard instrument"@en, "Tasteninstrument"@de ;
+    rdfs:comment "An instrument played through a row of keys. Keyboards cut across the other families, so several of these classes have a second parent."@en .
+:Piano a owl:Class ; rdfs:subClassOf :KeyboardInstrument, :StruckString ; rdfs:label "Piano"@en, "Klavier"@de ;
+    rdfs:comment "A keyboard instrument whose strings are struck by felt hammers."@en ; skos:altLabel "Pianoforte"@en .
+:Harpsichord a owl:Class ; rdfs:subClassOf :KeyboardInstrument, :PluckedString ; rdfs:label "Harpsichord"@en, "Cembalo"@de .
+:Organ a owl:Class ; rdfs:subClassOf :KeyboardInstrument, :WindInstrument ; rdfs:label "Pipe organ"@en, "Orgel"@de .
+:Celesta a owl:Class ; rdfs:subClassOf :KeyboardInstrument, :PitchedPercussion ; rdfs:label "Celesta"@en, "Celesta"@de .
+:Fortepiano a owl:Class ; rdfs:subClassOf :KeyboardInstrument ; rdfs:label "Fortepiano"@en ; owl:deprecated true ;
+    rdfs:comment "Deprecated. Use Piano instead."@en .
+
+:WindInstrument a owl:Class ; rdfs:subClassOf :Instrument ; rdfs:label "Wind instrument"@en, "Blasinstrument"@de .
+:Woodwind a owl:Class ; rdfs:subClassOf :WindInstrument ; rdfs:label "Woodwind"@en, "Holzblasinstrument"@de ; owl:disjointWith :Brass .
+:Brass a owl:Class ; rdfs:subClassOf :WindInstrument ; rdfs:label "Brass"@en, "Blechblasinstrument"@de .
+:Flute a owl:Class ; rdfs:subClassOf :Woodwind ; rdfs:label "Flute"@en, "Querflöte"@de .
+:Piccolo a owl:Class ; rdfs:subClassOf :Flute ; rdfs:label "Piccolo"@en, "Piccoloflöte"@de .
+:Oboe a owl:Class ; rdfs:subClassOf :Woodwind ; rdfs:label "Oboe"@en, "Oboe"@de .
+:CorAnglais a owl:Class ; rdfs:subClassOf :Oboe ; rdfs:label "Cor anglais"@en, "Englischhorn"@de ; skos:altLabel "English horn"@en .
+:Clarinet a owl:Class ; rdfs:subClassOf :Woodwind ; rdfs:label "Clarinet"@en, "Klarinette"@de .
+:BassClarinet a owl:Class ; rdfs:subClassOf :Clarinet ; rdfs:label "Bass clarinet"@en, "Bassklarinette"@de .
+:Bassoon a owl:Class ; rdfs:subClassOf :Woodwind ; rdfs:label "Bassoon"@en, "Fagott"@de .
+:Contrabassoon a owl:Class ; rdfs:subClassOf :Bassoon ; rdfs:label "Contrabassoon"@en, "Kontrafagott"@de .
+:Saxophone a owl:Class ; rdfs:subClassOf :Woodwind ; rdfs:label "Saxophone"@en, "Saxophon"@de .
+:Trumpet a owl:Class ; rdfs:subClassOf :Brass ; rdfs:label "Trumpet"@en, "Trompete"@de .
+:FrenchHorn a owl:Class ; rdfs:subClassOf :Brass ; rdfs:label "French horn"@en, "Waldhorn"@de .
+:Trombone a owl:Class ; rdfs:subClassOf :Brass ; rdfs:label "Trombone"@en, "Posaune"@de .
+:BassTrombone a owl:Class ; rdfs:subClassOf :Trombone ; rdfs:label "Bass trombone"@en, "Bassposaune"@de .
+:Tuba a owl:Class ; rdfs:subClassOf :Brass ; rdfs:label "Tuba"@en, "Tuba"@de .
+
+:PercussionInstrument a owl:Class ; rdfs:subClassOf :Instrument ; rdfs:label "Percussion instrument"@en, "Schlaginstrument"@de .
+:PitchedPercussion a owl:Class ; rdfs:subClassOf :PercussionInstrument ; rdfs:label "Pitched percussion"@en, "Stabspiel und Pauke"@de .
+:UnpitchedPercussion a owl:Class ; rdfs:subClassOf :PercussionInstrument ; rdfs:label "Unpitched percussion"@en, "Schlagwerk ohne Tonhöhe"@de .
+:Timpani a owl:Class ; rdfs:subClassOf :PitchedPercussion ; rdfs:label "Timpani"@en, "Pauke"@de ; skos:altLabel "Kettledrums"@en .
+:Xylophone a owl:Class ; rdfs:subClassOf :PitchedPercussion ; rdfs:label "Xylophone"@en, "Xylophon"@de .
+:Marimba a owl:Class ; rdfs:subClassOf :PitchedPercussion ; rdfs:label "Marimba"@en, "Marimba"@de .
+:Glockenspiel a owl:Class ; rdfs:subClassOf :PitchedPercussion ; rdfs:label "Glockenspiel"@en, "Glockenspiel"@de .
+:SnareDrum a owl:Class ; rdfs:subClassOf :UnpitchedPercussion ; rdfs:label "Snare drum"@en, "Kleine Trommel"@de .
+:BassDrum a owl:Class ; rdfs:subClassOf :UnpitchedPercussion ; rdfs:label "Bass drum"@en, "Große Trommel"@de .
+:Cymbals a owl:Class ; rdfs:subClassOf :UnpitchedPercussion ; rdfs:label "Cymbals"@en, "Becken"@de .
+:Triangle a owl:Class ; rdfs:subClassOf :UnpitchedPercussion ; rdfs:label "Triangle"@en, "Triangel"@de .
+:Tambourine a owl:Class ; rdfs:subClassOf :UnpitchedPercussion ; rdfs:label "Tambourine"@en, "Tamburin"@de .
+
+[] a owl:AllDisjointClasses ; owl:members ( :BowedString :Woodwind :Brass :UnpitchedPercussion ) .
+
+### People and groups
+
+:Agent a owl:Class ; rdfs:label "Agent"@en, "Akteur"@de ; rdfs:comment "A person or an organised group that can act."@en .
+:Person a owl:Class ; rdfs:subClassOf :Agent ; rdfs:label "Person"@en, "Person"@de ; owl:disjointWith :Organization .
+:Organization a owl:Class ; rdfs:subClassOf :Agent ; rdfs:label "Organization"@en, "Organisation"@de .
+
+:Musician a owl:Class ; rdfs:subClassOf :Person ; rdfs:label "Musician"@en, "Musiker"@de .
+:Instrumentalist a owl:Class ; rdfs:subClassOf :Musician ; rdfs:label "Instrumentalist"@en, "Instrumentalist"@de ;
+    rdfs:subClassOf [ a owl:Restriction ; owl:onProperty :plays ; owl:someValuesFrom :Instrument ] .
+:Violinist a owl:Class ; rdfs:subClassOf :Instrumentalist ; rdfs:label "Violinist"@en, "Geiger"@de ;
+    rdfs:subClassOf [ a owl:Restriction ; owl:onProperty :plays ; owl:someValuesFrom :Violin ] .
+:Cellist a owl:Class ; rdfs:subClassOf :Instrumentalist ; rdfs:label "Cellist"@en, "Cellist"@de ;
+    rdfs:subClassOf [ a owl:Restriction ; owl:onProperty :plays ; owl:someValuesFrom :Cello ] .
+:Pianist a owl:Class ; rdfs:subClassOf :Instrumentalist ; rdfs:label "Pianist"@en, "Pianist"@de ;
+    rdfs:subClassOf [ a owl:Restriction ; owl:onProperty :plays ; owl:someValuesFrom :Piano ] .
+:Percussionist a owl:Class ; rdfs:subClassOf :Instrumentalist ; rdfs:label "Percussionist"@en, "Schlagzeuger"@de ;
+    rdfs:subClassOf [ a owl:Restriction ; owl:onProperty :plays ; owl:someValuesFrom :PercussionInstrument ] .
+:Singer a owl:Class ; rdfs:subClassOf :Musician ; rdfs:label "Singer"@en, "Sänger"@de .
+:Soprano a owl:Class ; rdfs:subClassOf :Singer ; rdfs:label "Soprano"@en, "Sopran"@de .
+:Alto a owl:Class ; rdfs:subClassOf :Singer ; rdfs:label "Alto"@en, "Alt"@de .
+:Tenor a owl:Class ; rdfs:subClassOf :Singer ; rdfs:label "Tenor"@en, "Tenor"@de .
+:Baritone a owl:Class ; rdfs:subClassOf :Singer ; rdfs:label "Baritone"@en, "Bariton"@de .
+:Conductor a owl:Class ; rdfs:subClassOf :Musician ; rdfs:label "Conductor"@en, "Dirigent"@de ;
+    rdfs:subClassOf [ a owl:Restriction ; owl:onProperty :conducts ; owl:someValuesFrom :Ensemble ] .
+:Composer a owl:Class ; rdfs:subClassOf :Person ; rdfs:label "Composer"@en, "Komponist"@de .
+
+:Concertmaster a owl:Class ; rdfs:label "Concertmaster"@en, "Konzertmeister"@de ;
+    rdfs:comment "The leading first violinist. Defined by an equivalence, so the viewer places it under Violinist."@en ;
+    owl:equivalentClass [ a owl:Class ; owl:intersectionOf ( :Violinist [ a owl:Restriction ; owl:onProperty :leads ; owl:someValuesFrom :StringSection ] ) ] .
+:Soloist a owl:Class ; rdfs:label "Soloist"@en, "Solist"@de ;
+    owl:equivalentClass [ a owl:Class ; owl:intersectionOf ( :Musician [ a owl:Restriction ; owl:onProperty :soloistIn ; owl:someValuesFrom :Concert ] ) ] .
+
+:Ensemble a owl:Class ; rdfs:subClassOf :Organization ; rdfs:label "Ensemble"@en, "Ensemble"@de ;
+    rdfs:subClassOf [ a owl:Restriction ; owl:onProperty :hasMember ; owl:allValuesFrom :Musician ] .
+:Orchestra a owl:Class ; rdfs:subClassOf :Ensemble ; rdfs:label "Orchestra"@en, "Orchester"@de .
+:SymphonyOrchestra a owl:Class ; rdfs:subClassOf :Orchestra ; rdfs:label "Symphony orchestra"@en, "Sinfonieorchester"@de ;
+    rdfs:subClassOf [ a owl:Restriction ; owl:onProperty :hasSection ; owl:someValuesFrom :StringSection ] ,
+                    [ a owl:Restriction ; owl:onProperty :hasSection ; owl:someValuesFrom :WoodwindSection ] ,
+                    [ a owl:Restriction ; owl:onProperty :hasSection ; owl:someValuesFrom :BrassSection ] ,
+                    [ a owl:Restriction ; owl:onProperty :hasSection ; owl:someValuesFrom :PercussionSection ] .
+:ChamberOrchestra a owl:Class ; rdfs:subClassOf :Orchestra ; rdfs:label "Chamber orchestra"@en, "Kammerorchester"@de .
+:ChamberEnsemble a owl:Class ; rdfs:subClassOf :Ensemble ; rdfs:label "Chamber ensemble"@en, "Kammerensemble"@de .
+:StringQuartet a owl:Class ; rdfs:subClassOf :ChamberEnsemble ; rdfs:label "String quartet"@en, "Streichquartett"@de ;
+    rdfs:subClassOf [ a owl:Restriction ; owl:onProperty :hasMember ; owl:qualifiedCardinality "2"^^xsd:nonNegativeInteger ; owl:onClass :Violinist ] ,
+                    [ a owl:Restriction ; owl:onProperty :hasMember ; owl:qualifiedCardinality "1"^^xsd:nonNegativeInteger ; owl:onClass :Cellist ] ,
+                    [ a owl:Restriction ; owl:onProperty :hasMember ; owl:cardinality "4"^^xsd:nonNegativeInteger ] .
+:PianoTrio a owl:Class ; rdfs:subClassOf :ChamberEnsemble ; rdfs:label "Piano trio"@en, "Klaviertrio"@de ;
+    rdfs:subClassOf [ a owl:Restriction ; owl:onProperty :hasMember ; owl:someValuesFrom :Pianist ] ,
+                    [ a owl:Restriction ; owl:onProperty :hasMember ; owl:cardinality "3"^^xsd:nonNegativeInteger ] .
+:WindQuintet a owl:Class ; rdfs:subClassOf :ChamberEnsemble ; rdfs:label "Wind quintet"@en, "Bläserquintett"@de .
+:Choir a owl:Class ; rdfs:subClassOf :Ensemble ; rdfs:label "Choir"@en, "Chor"@de ;
+    rdfs:subClassOf [ a owl:Restriction ; owl:onProperty :hasMember ; owl:allValuesFrom :Singer ] .
+:Section a owl:Class ; rdfs:subClassOf :Organization ; rdfs:label "Section"@en, "Stimmgruppe"@de ;
+    rdfs:comment "A group of players of related instruments inside an orchestra."@en .
+:StringSection a owl:Class ; rdfs:subClassOf :Section ; rdfs:label "String section"@en, "Streicher"@de ;
+    rdfs:subClassOf [ a owl:Restriction ; owl:onProperty :hasMember ; owl:allValuesFrom
+        [ a owl:Restriction ; owl:onProperty :plays ; owl:someValuesFrom :BowedString ] ] .
+:WoodwindSection a owl:Class ; rdfs:subClassOf :Section ; rdfs:label "Woodwind section"@en, "Holzbläser"@de .
+:BrassSection a owl:Class ; rdfs:subClassOf :Section ; rdfs:label "Brass section"@en, "Blechbläser"@de .
+:PercussionSection a owl:Class ; rdfs:subClassOf :Section ; rdfs:label "Percussion section"@en, "Schlagwerk"@de .
+
+### Works, events and places
+
+:MusicalWork a owl:Class ; rdfs:label "Musical work"@en, "Musikwerk"@de ;
+    rdfs:subClassOf [ a owl:Restriction ; owl:onProperty :composedBy ; owl:someValuesFrom :Composer ] .
+:Symphony a owl:Class ; rdfs:subClassOf :MusicalWork ; rdfs:label "Symphony"@en, "Sinfonie"@de .
+:Concerto a owl:Class ; rdfs:subClassOf :MusicalWork ; rdfs:label "Concerto"@en, "Konzert (Werk)"@de ;
+    rdfs:subClassOf [ a owl:Restriction ; owl:onProperty :writtenFor ; owl:someValuesFrom :Instrument ] .
+:PianoConcerto a owl:Class ; rdfs:subClassOf :Concerto ; rdfs:label "Piano concerto"@en, "Klavierkonzert"@de ;
+    rdfs:subClassOf [ a owl:Restriction ; owl:onProperty :writtenFor ; owl:someValuesFrom :Piano ] .
+:ViolinConcerto a owl:Class ; rdfs:subClassOf :Concerto ; rdfs:label "Violin concerto"@en, "Violinkonzert"@de ;
+    rdfs:subClassOf [ a owl:Restriction ; owl:onProperty :writtenFor ; owl:someValuesFrom :Violin ] .
+:Opera a owl:Class ; rdfs:subClassOf :MusicalWork ; rdfs:label "Opera"@en, "Oper"@de .
+:Overture a owl:Class ; rdfs:subClassOf :MusicalWork ; rdfs:label "Overture"@en, "Ouvertüre"@de .
+:ChamberWork a owl:Class ; rdfs:subClassOf :MusicalWork ; rdfs:label "Chamber work"@en, "Kammermusikwerk"@de .
+
+:Event a owl:Class ; rdfs:label "Event"@en, "Ereignis"@de .
+:Performance a owl:Class ; rdfs:subClassOf :Event ; rdfs:label "Performance"@en, "Aufführung"@de .
+:Concert a owl:Class ; rdfs:subClassOf :Performance ; rdfs:label "Concert"@en, "Konzert (Veranstaltung)"@de ;
+    rdfs:subClassOf [ a owl:Restriction ; owl:onProperty :features ; owl:someValuesFrom :MusicalWork ] ,
+                    [ a owl:Restriction ; owl:onProperty :takesPlaceAt ; owl:someValuesFrom :ConcertHall ] .
+:OperaProduction a owl:Class ; rdfs:subClassOf :Performance ; rdfs:label "Opera production"@en, "Opernproduktion"@de ;
+    rdfs:subClassOf [ a owl:Restriction ; owl:onProperty :features ; owl:someValuesFrom :Opera ] ,
+                    [ a owl:Restriction ; owl:onProperty :takesPlaceAt ; owl:someValuesFrom :OperaHouse ] .
+:Rehearsal a owl:Class ; rdfs:subClassOf :Event ; rdfs:label "Rehearsal"@en, "Probe"@de .
+
+:Venue a owl:Class ; rdfs:label "Venue"@en, "Spielstätte"@de .
+:ConcertHall a owl:Class ; rdfs:subClassOf :Venue ; rdfs:label "Concert hall"@en, "Konzertsaal"@de .
+:OperaHouse a owl:Class ; rdfs:subClassOf :Venue ; rdfs:label "Opera house"@en, "Opernhaus"@de .
+
+### Object properties
+
+:plays a owl:ObjectProperty ; rdfs:label "plays"@en, "spielt"@de ; rdfs:domain :Instrumentalist ; rdfs:range :Instrument ; owl:inverseOf :playedBy .
+:playedBy a owl:ObjectProperty ; rdfs:label "played by"@en, "gespielt von"@de ; rdfs:domain :Instrument ; rdfs:range :Instrumentalist .
+:memberOf a owl:ObjectProperty ; rdfs:label "member of"@en, "Mitglied von"@de ; rdfs:domain :Musician ;
+    rdfs:range [ a owl:Class ; owl:unionOf ( :Ensemble :Section ) ] ; owl:inverseOf :hasMember .
+:hasMember a owl:ObjectProperty ; rdfs:label "has member"@en, "hat Mitglied"@de ; rdfs:range :Musician .
+:hasSection a owl:ObjectProperty ; rdfs:label "has section"@en, "hat Stimmgruppe"@de ; rdfs:domain :Orchestra ; rdfs:range :Section .
+:leads a owl:ObjectProperty ; rdfs:subPropertyOf :memberOf ; rdfs:label "leads"@en, "führt"@de ; rdfs:domain :Musician ; rdfs:range :Section .
+:conducts a owl:ObjectProperty ; rdfs:label "conducts"@en, "dirigiert"@de ; rdfs:domain :Conductor ; rdfs:range :Ensemble .
+:composedBy a owl:ObjectProperty, owl:FunctionalProperty ; rdfs:label "composed by"@en, "komponiert von"@de ; rdfs:domain :MusicalWork ; rdfs:range :Composer .
+:writtenFor a owl:ObjectProperty ; rdfs:label "written for"@en, "geschrieben für"@de ; rdfs:domain :MusicalWork ; rdfs:range :Instrument .
+:features a owl:ObjectProperty ; rdfs:label "features"@en, "bringt zur Aufführung"@de ; rdfs:domain :Performance ; rdfs:range :MusicalWork .
+:performedBy a owl:ObjectProperty ; rdfs:label "performed by"@en, "aufgeführt von"@de ; rdfs:domain :Performance ; rdfs:range :Ensemble .
+:soloistIn a owl:ObjectProperty ; rdfs:label "soloist in"@en, "Solist in"@de ; rdfs:domain :Musician ; rdfs:range :Performance .
+:takesPlaceAt a owl:ObjectProperty, owl:FunctionalProperty ; rdfs:label "takes place at"@en, "findet statt in"@de ; rdfs:domain :Event ; rdfs:range :Venue .
+:residentAt a owl:ObjectProperty ; rdfs:label "resident at"@en, "beheimatet in"@de ; rdfs:domain :Orchestra ; rdfs:range :ConcertHall .
+
+### Datatype properties
+
+:name a owl:DatatypeProperty ; rdfs:label "name"@en, "Name"@de ; rdfs:domain :Agent ; rdfs:range xsd:string .
+:opusNumber a owl:DatatypeProperty ; rdfs:label "opus number"@en, "Opuszahl"@de ; rdfs:domain :MusicalWork ; rdfs:range xsd:string .
+:premiereDate a owl:DatatypeProperty ; rdfs:label "premiere date"@en, "Datum der Uraufführung"@de ; rdfs:domain :MusicalWork ; rdfs:range xsd:date .
+:startTime a owl:DatatypeProperty ; rdfs:label "start time"@en, "Beginn"@de ; rdfs:domain :Event ; rdfs:range xsd:dateTime .
+:seats a owl:DatatypeProperty ; rdfs:label "seats"@en, "Sitzplätze"@de ; rdfs:domain :Venue ; rdfs:range xsd:positiveInteger .
+:numberOfStrings a owl:DatatypeProperty ; rdfs:label "number of strings"@en, "Anzahl der Saiten"@de ; rdfs:domain :StringInstrument ; rdfs:range xsd:positiveInteger .
+
+### A few individuals
+
+:Beethoven a owl:NamedIndividual, :Composer ; rdfs:label "Ludwig van Beethoven" .
+:ClaraSchumann a owl:NamedIndividual, :Composer, :Pianist ; rdfs:label "Clara Schumann" .
+:Symphony5 a owl:NamedIndividual, :Symphony ; rdfs:label "Symphony No. 5 in C minor" ; :composedBy :Beethoven ; :opusNumber "67" .
+:EmperorConcerto a owl:NamedIndividual, :PianoConcerto ; rdfs:label "Piano Concerto No. 5 (Emperor)" ; :composedBy :Beethoven ; :opusNumber "73" .
+:Musikverein a owl:NamedIndividual, :ConcertHall ; rdfs:label "Musikverein, Vienna" ; :seats "1744"^^xsd:positiveInteger .
+:Concertgebouw a owl:NamedIndividual, :ConcertHall ; rdfs:label "Concertgebouw, Amsterdam" ; :seats "1974"^^xsd:positiveInteger .

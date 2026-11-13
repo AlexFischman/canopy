@@ -1,0 +1,69 @@
+<!DOCTYPE html>
+<html lang="en" data-theme="light">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Canopy ontology viewer</title>
+<style>
+/*CSS*/
+</style>
+</head>
+<body>
+<div id="app">
+  <header id="bar">
+    <div class="brand" title="Canopy ontology viewer">
+      <svg viewBox="0 0 22 22" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M3 11h5M8 11V5.5a1.5 1.5 0 0 1 1.5-1.5H13M8 11v5.5A1.5 1.5 0 0 0 9.5 18H13M8 11h5"/><circle cx="16" cy="4" r="2" fill="currentColor" stroke="none"/><circle cx="16" cy="11" r="2" fill="currentColor" stroke="none"/><circle cx="16" cy="18" r="2" fill="currentColor" stroke="none"/></svg>
+      <span>Canopy</span>
+    </div>
+    <button class="btn" id="fileBtn" aria-haspopup="true" aria-expanded="false" title="Open another ontology"><span class="fname">No file</span><span class="fmeta"></span></button>
+    <div id="searchWrap">
+      <svg viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" aria-hidden="true"><circle cx="7" cy="7" r="4.5"/><path d="M10.5 10.5 14 14"/></svg>
+      <input id="search" type="text" placeholder="Search classes and properties" autocomplete="off" spellcheck="false" aria-label="Search classes and properties">
+      <kbd aria-hidden="true">/</kbd>
+      <div id="results" hidden></div>
+    </div>
+    <div class="spacer"></div>
+    <div class="seg" id="viewSeg" role="group" aria-label="View">
+      <button data-v="tree" aria-pressed="true" title="The whole hierarchy as a collapsible tree (G)">Tree</button>
+      <button data-v="focus" aria-pressed="false" title="The neighbourhood of the selected class (G)">Focus</button>
+    </div>
+    <button class="btn" id="optBtn" aria-haspopup="true" aria-expanded="false"><span class="lbl">View options</span></button>
+    <button class="btn" id="expBtn" aria-haspopup="true" aria-expanded="false"><span class="lbl">Export</span></button>
+    <button class="btn icon" id="themeBtn" aria-label="Switch between light and dark" title="Switch between light and dark (T)"></button>
+    <button class="btn icon" id="helpBtn" aria-label="Help and keyboard shortcuts" title="Help and keyboard shortcuts (?)"></button>
+  </header>
+  <main id="stage">
+    <canvas id="cv" tabindex="0" aria-label="Ontology canvas. Use the search field and the details panel to read its content."></canvas>
+    <div id="focusBar" hidden></div>
+    <div id="hint" hidden></div>
+    <div id="empty" hidden></div>
+    <button class="btn line icon" id="panelToggle" aria-label="Show the details panel" title="Show the details panel (P)"></button>
+    <div id="ctl"></div>
+    <canvas id="mini" hidden></canvas>
+    <div id="tip" hidden></div>
+  </main>
+  <aside id="panel" aria-label="Details">
+    <div id="tabs" role="tablist">
+      <button role="tab" data-tab="details" aria-selected="true">Details</button>
+      <button role="tab" data-tab="props" aria-selected="false">Properties<span class="n"></span></button>
+      <button class="mini-btn" id="panelHide" style="margin-left:auto;align-self:center" aria-label="Hide the details panel" title="Hide the details panel (P)"></button>
+    </div>
+    <div id="pbody"></div>
+  </aside>
+</div>
+<div id="drop" hidden><div>Drop to open<span>RDF/XML, Turtle or N-Triples. Several files are merged into one view.</span></div></div>
+<div id="modal" hidden></div>
+<div id="busy" hidden><div><b></b><i></i></div></div>
+<div id="toast" hidden role="status"></div>
+<input type="file" id="file" hidden multiple>
+<script type="text/plain" id="sample-ttl">
+/*SAMPLE*/
+</script>
+<script>
+/*CORE*/
+</script>
+<script>
+/*UI*/
+</script>
+</body>
+</html>
